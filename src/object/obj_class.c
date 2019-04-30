@@ -497,7 +497,6 @@ obj_ec_codec_get(daos_oclass_id_t oc_id)
 	return NULL;
 }
 
-<<<<<<< HEAD
 /**
  * Encode (using ISA-L) a full stripe from the submitted scatter-gather list.
  *
@@ -569,6 +568,8 @@ obj_encode_full_stripe(daos_obj_id_t oid, daos_sg_list_t *sgl, uint32_t *sg_idx,
 		       &parity->p_bufs[p_idx]);
 =======
 
+=======
+>>>>>>> DAOS-2203 -- Fixed comparison operator for remaining iov length and amount copied.
 /**
  * Encode (using ISA-L) a full stripe from the submitted scatter-gather list.
  *
@@ -622,7 +623,7 @@ obj_encode_full_stripe(daos_obj_id_t oid, daos_sg_list_t *sgl, uint32_t *sg_idx,
 
 				memcpy(&ldata[lcnt][cp_cnt], &from[*sg_off],
 				       cp_amt);
-				if (sgl->sg_iovs[*sg_idx].iov_len - *sg_off <
+				if (sgl->sg_iovs[*sg_idx].iov_len - *sg_off <=
 					len - cp_cnt) {
 					*sg_off = 0;
 					(*sg_idx)++;
