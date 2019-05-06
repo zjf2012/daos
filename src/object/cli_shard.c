@@ -348,7 +348,7 @@ obj_shard_rw(struct dc_obj_shard *shard, enum obj_rpc_opc opc,
 	     daos_epoch_t epoch, daos_key_t *dkey, unsigned int nr,
 	     daos_iod_t *iods, daos_sg_list_t *sgls, unsigned int *map_ver,
 	     unsigned int start_shard, struct daos_obj_shard_tgt *fw_shard_tgts,
-	     uint32_t fw_cnt, tse_task_t *task, struct daos_tx_id *dti,
+	     uint32_t fw_cnt, tse_task_t *task, struct dtx_id *dti,
 	     uint32_t flags)
 {
 	struct dc_pool	       *pool;
