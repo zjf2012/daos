@@ -150,8 +150,8 @@ struct obj_tls {
 };
 
 struct obj_ec_parity {
-       int             nr;
-       unsigned char   **p_bufs;
+       unsigned char	**p_bufs;
+       unsigned int	  p_nr;
 };
 
 static inline struct obj_tls *

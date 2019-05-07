@@ -1586,7 +1586,7 @@ ec_init_params(struct ec_params* params, daos_iod_t *iod, daos_sg_list_t *sgl)
 	params->nsgl.sg_nr	= 0;	
 	params->nsgl.sg_nr_out	= 0;	
 	params->p_segs.p_bufs	= NULL;
-	params->p_segs.nr	= 0;
+	params->p_segs.p_nr	= 0;
 	params->iods		= NULL;
 	params->sgls		= NULL;
 	params->next		= NULL;
@@ -1660,7 +1660,7 @@ ec_allocate_parity(struct obj_ec_parity *par, unsigned int len, unsigned int p,
 		D_ALLOC(par->p_bufs[i], len);
 		if (par->p_bufs[i] == NULL)
 			return -DER_NOMEM;
-		par->nr++;
+		par->p_nr++;
 	}
 	return rc;
 }
@@ -1751,10 +1751,10 @@ ec_update_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
 		params->niod.iod_recxs[params->niod.iod_nr++] =
 			iod->iod_recxs[i];
 
-	D_ALLOC_ARRAY(params->nsgl.sg_iovs, (params->p_segs.nr + sgl->sg_nr));
+	D_ALLOC_ARRAY(params->nsgl.sg_iovs, (params->p_segs.p_nr + sgl->sg_nr));
 	if (params->nsgl.sg_iovs == NULL)
 		return -DER_NOMEM;
-	for (i = 0; i < params->p_segs.nr; i++) {
+	for (i = 0; i < params->p_segs.p_nr; i++) {
 		params->nsgl.sg_iovs[i].iov_buf = params->p_segs.p_bufs[i];	
 		params->nsgl.sg_iovs[i].iov_buf_len = len;	
 		params->nsgl.sg_iovs[i].iov_len = len;	
@@ -1781,7 +1781,7 @@ ec_free_params_cb(tse_task_t *task, void *data)
 
 		D_FREE(current->niod.iod_recxs);
 		D_FREE(current->nsgl.sg_iovs);
-		for (i = 0; i < current->p_segs.nr; i++)
+		for (i = 0; i < current->p_segs.p_nr; i++)
 			D_FREE(current->p_segs.p_bufs[i]);
 		D_FREE(current->p_segs.p_bufs);
 		head = current->next;
@@ -1915,7 +1915,7 @@ ec_obj_update(tse_task_t *task, daos_obj_id_t oid, daos_oclass_attr_t *oca,
 			current = head;
 			D_FREE(current->niod.iod_recxs);
 			D_FREE(current->nsgl.sg_iovs);
-			for (i = 0; i < current->p_segs.nr; i++)
+			for (i = 0; i < current->p_segs.p_nr; i++)
 				D_FREE(current->p_segs.p_bufs[i]);
 			D_FREE(current->p_segs.p_bufs);
 			head = current->next;
