@@ -2076,7 +2076,7 @@ dc_obj_update(tse_task_t *task)
 		shard_arg->sgls			= args->sgls;
 		shard_arg->auxi.map_ver		= map_ver;
 		shard_arg->auxi.shard		= shard;
-		shard_arg->auxi.shard		= start_shard;
+		shard_arg->auxi.start_shard	= start_shard;
 		shard_arg->auxi.target		= obj_shard2tgtid(obj, shard);
 		shard_arg->auxi.obj		= obj;
 		shard_arg->auxi.obj_auxi	= obj_auxi;
