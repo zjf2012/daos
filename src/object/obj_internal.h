@@ -150,8 +150,8 @@ struct obj_tls {
 };
 
 struct obj_ec_parity {
-       unsigned char	**p_bufs;
-       unsigned int	  p_nr;
+	unsigned char	**p_bufs;
+	unsigned int	  p_nr;
 };
 
 static inline struct obj_tls *
@@ -170,7 +170,7 @@ int dc_obj_shard_update(struct dc_obj_shard *shard, daos_epoch_t epoch,
 			daos_key_t *dkey, unsigned int nr,
 			daos_iod_t *iods, daos_sg_list_t *sgls,
 			unsigned int *map_ver, unsigned int start_shard,
-		        struct daos_obj_shard_tgt *tgts,
+			struct daos_obj_shard_tgt *tgts,
 			uint32_t fw_cnt, tse_task_t *task,
 			struct dtx_id *dti, uint32_t flags);
 

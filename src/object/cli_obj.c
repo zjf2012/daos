@@ -527,13 +527,13 @@ obj_shards_2_fwtgts(struct dc_object *obj, uint32_t map_ver, uint64_t tgt_set,
 	lead_shard = rc;
 	if (tgt_set) {
 		for (i = 0; i < *shard_cnt; i++) {
-			if ( *start_shard + i != lead_shard &&
-			      tgt_set & (1UL << i)) {
+			if (*start_shard + i != lead_shard &&
+			    tgt_set & (1UL << i)) {
 				new_fw_cnt++;
 			}
 		}
 	} else
-		new_fw_cnt = *shard_cnt -1;
+		new_fw_cnt = *shard_cnt - 1;
 
 	if (shard_tgts != NULL && *fw_cnt != new_fw_cnt) {
 		/* fw_cnt possibly changed per progressive layout */
@@ -553,7 +553,7 @@ obj_shards_2_fwtgts(struct dc_object *obj, uint32_t map_ver, uint64_t tgt_set,
 		uint32_t	shard;
 
 		shard = *start_shard + i;
-		if (shard == lead_shard || (tgt_set && !( tgt_set & 1UL << i)))
+		if (shard == lead_shard || (tgt_set && !(tgt_set & 1UL << i)))
 			continue;
 
 		rc = obj_shard_tgts_query(obj, map_ver, shard,
@@ -1521,18 +1521,19 @@ shard_task_reset_target(tse_task_t *shard_task, void *arg)
 	return 0;
 }
 
-/* EC struct used to save state during encoding and to drive resource recovery */
+/* EC struct used to save state during encoding and to drive resource recovery.
+ */
 struct ec_params {
-        daos_iod_t		*iods;	/* Replaces iod array in update.
+	daos_iod_t		*iods;	/* Replaces iod array in update.
 					 * NULL except head of list
 					 */
 	daos_sg_list_t		*sgls;	/* Replaces sgl array in update.
 					 * NULL except head
 					 */
-	unsigned int		nr; 	/* number of records in iods and sgls
-					* (same as update_t)
-					*/
-        daos_iod_t		niod;	/* replacement IOD for an input IOD
+	unsigned int		nr;	/* number of records in iods and sgls
+					 * (same as update_t)
+					 */
+	daos_iod_t		niod;	/* replacement IOD for an input IOD
 					 * that includes full stripe.
 					 */
 	daos_sg_list_t		nsgl;	/* replacement SGL for an input IOD that
@@ -1541,31 +1542,32 @@ struct ec_params {
 	struct obj_ec_parity	p_segs;	/* Structure containing array of
 					 * pointers to parity extents.
 					 */
-        struct ec_params        *next;	/* Pointer to next entry in list. */
+	struct ec_params        *next;	/* Pointer to next entry in list. */
 };
 
 /* Determines weather a given IOD contains a recx that is at least a full
  * stripe's worth of data.
  */
 static bool
-ec_has_full_stripe(daos_iod_t* iod, struct daos_oclass_attr *oca,
-		uint64_t *tgt_set)
+ec_has_full_stripe(daos_iod_t *iod, struct daos_oclass_attr *oca,
+		   uint64_t *tgt_set)
 {
 	unsigned int	ss = oca->u.ec.e_k * oca->u.ec.e_len;
-	unsigned int 	i;
-	
+	unsigned int	i;
+
 	for (i = 0; i < iod->iod_nr; i++) {
 		if (iod->iod_type == DAOS_IOD_ARRAY) {
 			int start = iod->iod_recxs[i].rx_idx * iod->iod_size;
-			int length = iod->iod_recxs[i].rx_nr * iod->iod_size; 
+			int length = iod->iod_recxs[i].rx_nr * iod->iod_size;
+
 			if (length < ss) {
 				continue;
-			} else if ( length - (start % ss) >= ss ) {
+			} else if (length - (start % ss) >= ss) {
 				*tgt_set = ~0UL;
 				return true;
 			}
 		} else if (iod->iod_type == DAOS_IOD_SINGLE &&
-			   iod->iod_size >= ss ) {
+			   iod->iod_size >= ss) {
 			*tgt_set = ~0UL;
 			return true;
 		}
@@ -1575,16 +1577,16 @@ ec_has_full_stripe(daos_iod_t* iod, struct daos_oclass_attr *oca,
 
 /* Initialize a param structure for an IOD--SGL pair. */
 static void
-ec_init_params(struct ec_params* params, daos_iod_t *iod, daos_sg_list_t *sgl)
+ec_init_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl)
 {
 	params->niod		= *iod;
 	params->nsgl		= *sgl;
 	params->nr		= 0;
-	params->niod.iod_recxs	= NULL;	
-	params->niod.iod_nr	= 0;	
-	params->nsgl.sg_iovs	= NULL;	
-	params->nsgl.sg_nr	= 0;	
-	params->nsgl.sg_nr_out	= 0;	
+	params->niod.iod_recxs	= NULL;
+	params->niod.iod_nr	= 0;
+	params->nsgl.sg_iovs	= NULL;
+	params->nsgl.sg_nr	= 0;
+	params->nsgl.sg_nr_out	= 0;
 	params->p_segs.p_bufs	= NULL;
 	params->p_segs.p_nr	= 0;
 	params->iods		= NULL;
@@ -1604,10 +1606,10 @@ ec_set_head_params(struct ec_params *head, daos_obj_update_t *args,
 {
 	unsigned int i;
 
-	D_ALLOC_ARRAY(head->iods, args->nr); 
+	D_ALLOC_ARRAY(head->iods, args->nr);
 	if (head->iods == NULL)
 		return -DER_NOMEM;
-	D_ALLOC_ARRAY(head->sgls, args->nr); 
+	D_ALLOC_ARRAY(head->sgls, args->nr);
 	if (head->sgls == NULL) {
 		D_FREE(head->iods);
 		return -DER_NOMEM;
@@ -1638,7 +1640,7 @@ ec_move_sgl_cursors(daos_sg_list_t *sgl, size_t size, unsigned int *sg_idx,
 			}
 			buf_len += sgl->sg_iovs[*sg_idx].iov_len;
 		}
-	}	
+	}
 }
 
 /* Allocates a stripe's worth of parity cells. */
@@ -1681,7 +1683,7 @@ ec_array_encode(struct ec_params *params, daos_obj_id_t oid, daos_iod_t *iod,
 	unsigned long	recx_end_offset = (this_recx.rx_nr * iod->iod_size) +
 					  recx_start_offset;
 	unsigned int	i;
-	int 		rc = 0;
+	int		rc = 0;
 
 	/* s_cur is the index (in bytes) into the recx where a full stripe
 	 * begins.
@@ -1689,8 +1691,8 @@ ec_array_encode(struct ec_params *params, daos_obj_id_t oid, daos_iod_t *iod,
 	s_cur = recx_start_offset + (recx_start_offset % (len * k));
 	if (s_cur != recx_start_offset)
 		/* if the start of stripe is not at beginning of recx, move
- 		 * the sgl index to where the stripe begins).
- 		 */
+		 * the sgl index to where the stripe begins).
+		 */
 		ec_move_sgl_cursors(sgl, recx_start_offset % (len * k), sg_idx,
 				    sg_off);
 
@@ -1711,16 +1713,16 @@ ec_array_encode(struct ec_params *params, daos_obj_id_t oid, daos_iod_t *iod,
 		 */
 		D_REALLOC_ARRAY(nrecx, (params->niod.iod_recxs),
 				(params->niod.iod_nr+p));
-		if ( nrecx == NULL)
+		if (nrecx == NULL)
 			return -DER_NOMEM;
-		else if ( nrecx != params->niod.iod_recxs)
+		else if (nrecx != params->niod.iod_recxs)
 			params->niod.iod_recxs = nrecx;
 		for (i = 0; i < p; i++) {
-			 params->niod.iod_recxs[params->niod.iod_nr].rx_idx =
-			    PARITY_INDICATOR | 
-			    ((s_cur+(unsigned long)(i*len)) /
-				params->niod.iod_size);
-			 params->niod.iod_recxs[params->niod.iod_nr++].rx_nr =
+			params->niod.iod_recxs[params->niod.iod_nr].rx_idx =
+			PARITY_INDICATOR | (s_cur+i*len)/params->niod.iod_size;
+			D_INFO("parity offset: %lu\n",
+			params->niod.iod_recxs[params->niod.iod_nr].rx_idx);
+			params->niod.iod_recxs[params->niod.iod_nr++].rx_nr =
 				len / params->niod.iod_size;
 		}
 	}
@@ -1738,7 +1740,7 @@ ec_update_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
 		 unsigned int len)
 {
 	daos_recx_t	*nrecx;
-	unsigned int 	 i;
+	unsigned int	 i;
 	int		 rc = 0;
 
 	D_REALLOC_ARRAY(nrecx, (params->niod.iod_recxs),
@@ -1755,12 +1757,12 @@ ec_update_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
 	if (params->nsgl.sg_iovs == NULL)
 		return -DER_NOMEM;
 	for (i = 0; i < params->p_segs.p_nr; i++) {
-		params->nsgl.sg_iovs[i].iov_buf = params->p_segs.p_bufs[i];	
-		params->nsgl.sg_iovs[i].iov_buf_len = len;	
-		params->nsgl.sg_iovs[i].iov_len = len;	
-		params->nsgl.sg_nr++;	
+		params->nsgl.sg_iovs[i].iov_buf = params->p_segs.p_bufs[i];
+		params->nsgl.sg_iovs[i].iov_buf_len = len;
+		params->nsgl.sg_iovs[i].iov_len = len;
+		params->nsgl.sg_nr++;
 	}
-	for (i = 0; i < sgl->sg_nr; i++) 
+	for (i = 0; i < sgl->sg_nr; i++)
 		params->nsgl.sg_iovs[params->nsgl.sg_nr++] = sgl->sg_iovs[i];
 
 	return rc;
@@ -1770,7 +1772,7 @@ ec_update_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
 static int
 ec_free_params_cb(tse_task_t *task, void *data)
 {
-	struct ec_params *head = *((struct ec_params**)data);
+	struct ec_params *head = *((struct ec_params **)data);
 	int		  rc = task->dt_result;
 
 	D_FREE(head->iods);
@@ -1797,11 +1799,11 @@ static void
 ec_init_tgt_set(daos_iod_t *iods, unsigned int nr,
 		struct daos_oclass_attr *oca, unsigned long *tgt_set)
 {
-        unsigned int    len = oca->u.ec.e_len;
-        unsigned int    k = oca->u.ec.e_k;
-        unsigned int    p = oca->u.ec.e_p;
-	unsigned long 	par_only = (1UL << p) - 1;
-	unsigned long 	full = (1UL <<  (k+p)) - 1;
+	unsigned int    len = oca->u.ec.e_len;
+	unsigned int    k = oca->u.ec.e_k;
+	unsigned int    p = oca->u.ec.e_p;
+	unsigned long	par_only = (1UL << p) - 1;
+	unsigned long	full = (1UL <<  (k+p)) - 1;
 	unsigned int	i, j;
 
 	for (i = 0; i < p; i++)
@@ -1848,11 +1850,11 @@ ec_obj_update(tse_task_t *task, daos_obj_id_t oid, daos_oclass_attr_t *oca,
 	daos_obj_update_t	*args = dc_task_get_args(task);
 	struct ec_params	*head = NULL;
 	struct ec_params	*current = NULL;
-	unsigned int           	i, j;
-	int			rc = 0;
+	unsigned int		 i, j;
+	int			 rc = 0;
 
 	for (i = 0; i < args->nr; i++) {
-		if ( ec_has_full_stripe(&(args->iods[i]), oca, tgt_set) ) {
+		if (ec_has_full_stripe(&(args->iods[i]), oca, tgt_set)) {
 			struct ec_params *params;
 
 			D_ALLOC_PTR(params);
@@ -1874,13 +1876,14 @@ ec_obj_update(tse_task_t *task, daos_obj_id_t oid, daos_oclass_attr_t *oca,
 			if (args->iods[i].iod_type == DAOS_IOD_ARRAY) {
 				unsigned int sg_idx = 0;
 				size_t sg_off = 0;
+
 				for (j = 0; j < args->iods[i].iod_nr; j++) {
-		   			rc = ec_array_encode(params, oid,
+					rc = ec_array_encode(params, oid,
 							     &args->iods[i],
 							     &args->sgls[i],
 							     oca, j, &sg_idx,
 							     &sg_off);
-			 		if (rc != 0)
+					if (rc != 0)
 						break;
 				}
 				rc = ec_update_params(params, &args->iods[i],
@@ -1898,7 +1901,7 @@ ec_obj_update(tse_task_t *task, daos_obj_id_t oid, daos_oclass_attr_t *oca,
 				/* Encode single value */
 			}
 		} else if (head != NULL && &(head->sgls[i]) != NULL) {
-			/* Add sgls[i] and iods[i] to head. Since we're 
+			/* Add sgls[i] and iods[i] to head. Since we're
 			 * adding ec parity (head != NULL) and thus need to
 			 * replace the arrays in the update struct.
 			 */
@@ -1973,17 +1976,18 @@ dc_obj_update(tse_task_t *task)
 				daos_oclass_attr_find(obj->cob_md.omd_id);
 	if (oca->ca_resil == DAOS_RES_EC) {
 		rc = ec_obj_update(task, obj->cob_md.omd_id, oca, &tgt_set);
-		if (rc != 0) {
+		if (rc != 0)
 			goto out_task;
-		}
 		/* If a full stripe, ec_obj_update sets tgt_set to all 1s. */
-		if ( tgt_set ) {
+		if (tgt_set != 0) {
 			/* tgt_set == 0 means send to all forwarding targets
-			 * from leader.
+			 * from leader. If it's not zero here, it means that
+			 * ec_object_update encoded a full stripe. Hence
+			 * the update should go to all targets.
 			 */
 			tgt_set = 0;
 		} else {
-			/* Called for updates with no full stripes. 
+			/* Called for updates with no full stripes.
 			 * Builds a bit map only if forwarding targets are
 			 * a proper subset. Sets tgt_set to zero if all targets
 			 * are addressed.
