@@ -1627,12 +1627,11 @@ static void
 ec_move_sgl_cursors(daos_sg_list_t *sgl, size_t size, unsigned int *sg_idx,
 		 size_t *sg_off)
 {
-	size_t	buf_len;
-
 	if (size < sgl->sg_iovs[*sg_idx].iov_len - *sg_off) {
 		*sg_off += size;
 	} else {
-		buf_len = sgl->sg_iovs[*sg_idx].iov_len - *sg_off;
+		size_t buf_len = sgl->sg_iovs[*sg_idx].iov_len - *sg_off;
+
 		for (*sg_off = 0; *sg_idx < sgl->sg_nr; (*sg_idx)++) {
 			if (buf_len + sgl->sg_iovs[*sg_idx].iov_len > size) {
 				*sg_off = size - buf_len;
@@ -1720,8 +1719,11 @@ ec_array_encode(struct ec_params *params, daos_obj_id_t oid, daos_iod_t *iod,
 		for (i = 0; i < p; i++) {
 			params->niod.iod_recxs[params->niod.iod_nr].rx_idx =
 			PARITY_INDICATOR | (s_cur+i*len)/params->niod.iod_size;
+<<<<<<< HEAD
 			D_INFO("parity offset: %lu\n",
 			params->niod.iod_recxs[params->niod.iod_nr].rx_idx);
+=======
+>>>>>>> jgm/DAOS-2203-2
 			params->niod.iod_recxs[params->niod.iod_nr++].rx_nr =
 				len / params->niod.iod_size;
 		}
@@ -1996,9 +1998,12 @@ dc_obj_update(tse_task_t *task)
 		}
 	}
 
+<<<<<<< HEAD
 	obj_auxi = tse_task_stack_push(task, sizeof(*obj_auxi));
 	obj_auxi->opc = DAOS_OBJ_RPC_UPDATE;
 	shard_task_list_init(obj_auxi);
+=======
+>>>>>>> jgm/DAOS-2203-2
 	obj_auxi = tse_task_stack_push(task, sizeof(*obj_auxi));
 	obj_auxi->opc = DAOS_OBJ_RPC_UPDATE;
 	shard_task_list_init(obj_auxi);
