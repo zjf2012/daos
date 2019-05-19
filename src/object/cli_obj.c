@@ -1719,11 +1719,6 @@ ec_array_encode(struct ec_params *params, daos_obj_id_t oid, daos_iod_t *iod,
 		for (i = 0; i < p; i++) {
 			params->niod.iod_recxs[params->niod.iod_nr].rx_idx =
 			PARITY_INDICATOR | (s_cur+i*len)/params->niod.iod_size;
-<<<<<<< HEAD
-			D_INFO("parity offset: %lu\n",
-			params->niod.iod_recxs[params->niod.iod_nr].rx_idx);
-=======
->>>>>>> jgm/DAOS-2203-2
 			params->niod.iod_recxs[params->niod.iod_nr++].rx_nr =
 				len / params->niod.iod_size;
 		}
