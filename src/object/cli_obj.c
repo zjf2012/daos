@@ -1993,12 +1993,6 @@ dc_obj_update(tse_task_t *task)
 		}
 	}
 
-<<<<<<< HEAD
-	obj_auxi = tse_task_stack_push(task, sizeof(*obj_auxi));
-	obj_auxi->opc = DAOS_OBJ_RPC_UPDATE;
-	shard_task_list_init(obj_auxi);
-=======
->>>>>>> jgm/DAOS-2203-2
 	obj_auxi = tse_task_stack_push(task, sizeof(*obj_auxi));
 	obj_auxi->opc = DAOS_OBJ_RPC_UPDATE;
 	shard_task_list_init(obj_auxi);
