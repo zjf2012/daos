@@ -502,6 +502,11 @@ out:
 	return rc;
 }
 
+/* The tgt_set parameter is a bit map indicating the proper subset of targets
+ * to forward the update for EC ojbects. For non-EC objects, and for EC updates
+ * that include a full-stripe update (i.e., parity has been generated), the
+ * tgt_set varible is set to zero.
+ */
 static int
 obj_shards_2_fwtgts(struct dc_object *obj, uint32_t map_ver, uint64_t tgt_set,
 		    uint32_t *start_shard, uint32_t *shard_cnt,
@@ -526,15 +531,13 @@ obj_shards_2_fwtgts(struct dc_object *obj, uint32_t map_ver, uint64_t tgt_set,
 	}
 	lead_shard = rc;
 	if (tgt_set) {
-		for (i = 0; i < *shard_cnt; i++) {
+		for (i = 0; i < *shard_cnt; i++)
 			if (*start_shard + i != lead_shard &&
-			    tgt_set & (1UL << i)) {
+			    tgt_set & (1UL << i))
 				new_fw_cnt++;
-			}
-		}
-	} else
+	} else {
 		new_fw_cnt = *shard_cnt - 1;
-
+	}
 	if (shard_tgts != NULL && *fw_cnt != new_fw_cnt) {
 		/* fw_cnt possibly changed per progressive layout */
 		D_FREE(shard_tgts);
@@ -918,8 +921,11 @@ struct obj_auxi_args {
 	int				 result;
 	d_list_t			 shard_task_head;
 	tse_task_t			*obj_task;
-	struct daos_obj_shard_tgt	*fw_shard_tgts;
-	uint32_t			 fw_cnt;
+	struct daos_obj_shard_tgt	*fw_shard_tgts_inline;
+	struct daos_obj_shard_tgt	**fw_shard_tgts;
+	uint32_t			*fw_cnt;
+	uint32_t			 fw_cnt_inline;
+	uint32_t			 fw_rdg_count;
 };
 
 static inline bool
@@ -1026,7 +1032,7 @@ struct shard_update_args {
 	uint64_t		 dkey_hash;
 	unsigned int		 nr;
 	daos_iod_t		*iods;
-	daos_sg_list_t		*sgls;
+	d_sg_list_t		*sgls;
 };
 
 static int
@@ -1174,8 +1180,24 @@ obj_comp_cb(tse_task_t *task, void *data)
 		task->dt_result = obj_auxi->result;
 
 	if (!obj_auxi->io_retry) {
-		D_FREE(obj_auxi->fw_shard_tgts);
-		obj_auxi->fw_cnt = 0;
+		int	i;
+
+		if (obj_auxi->fw_shard_tgts != NULL) {
+			for (i = 0; i < obj_auxi->fw_rdg_count; i++)
+				D_FREE(obj_auxi->fw_shard_tgts[i]);
+			obj_auxi->fw_rdg_count = 0;
+
+			if (obj_auxi->fw_shard_tgts !=
+			    &obj_auxi->fw_shard_tgts_inline)
+				D_FREE(obj_auxi->fw_shard_tgts);
+			obj_auxi->fw_shard_tgts = NULL;
+		}
+
+		if (obj_auxi->fw_cnt != &obj_auxi->fw_cnt_inline &&
+		    obj_auxi->fw_cnt !=  NULL)
+			D_FREE(obj_auxi->fw_cnt);
+		obj_auxi->fw_cnt = NULL;
+
 		if (head != NULL) {
 			tse_task_list_traverse(head, shard_task_remove, NULL);
 			D_ASSERT(d_list_empty(head));
@@ -1191,7 +1213,7 @@ obj_recx_valid(unsigned int nr, daos_recx_t *recxs, bool update)
 {
 	struct umem_attr	uma;
 	daos_handle_t		bth;
-	daos_iov_t		key;
+	d_iov_t		key;
 	int			idx;
 	bool			overlapped;
 	struct btr_root		broot = { 0 };
@@ -1228,7 +1250,7 @@ obj_recx_valid(unsigned int nr, daos_recx_t *recxs, bool update)
 
 		overlapped = false;
 		for (idx = 0; idx < nr; idx++) {
-			daos_iov_set(&key, &recxs[idx], sizeof(daos_recx_t));
+			d_iov_set(&key, &recxs[idx], sizeof(daos_recx_t));
 			rc = dbtree_update(bth, &key, NULL);
 			if (rc != 0) {
 				overlapped = true;
@@ -1384,7 +1406,7 @@ shard_update_task(tse_task_t *task)
 		}
 	}
 	if (DAOS_FAIL_CHECK(DAOS_OBJ_TGT_IDX_CHANGE) &&
-	    args->auxi.obj_auxi->fw_shard_tgts == NULL) {
+	    args->auxi.obj_auxi->fw_shard_tgts[0] == NULL) {
 		shard_tmp = daos_fail_value_get();
 		/* to trigger retry on all other shards */
 		if (args->auxi.shard != shard_tmp) {
@@ -1411,8 +1433,8 @@ shard_update_task(tse_task_t *task)
 	rc = dc_obj_shard_update(obj_shard, args->epoch, args->dkey, args->nr,
 				 args->iods, args->sgls, &args->auxi.map_ver,
 				 args->auxi.start_shard,
-				 args->auxi.obj_auxi->fw_shard_tgts,
-				 args->auxi.obj_auxi->fw_cnt, task,
+				 args->auxi.obj_auxi->fw_shard_tgts[0],
+				 args->auxi.obj_auxi->fw_cnt[0], task,
 				 &args->dti, args->auxi.obj_auxi->flags);
 
 	obj_shard_close(obj_shard);
@@ -1508,426 +1530,51 @@ obj_shard_task_sched(struct obj_auxi_args *obj_auxi)
 		tse_task_complete(obj_auxi->obj_task, 0);
 }
 
+struct shard_reset_target {
+	unsigned int		 srt_is_punch:1;
+	unsigned int		 srt_rdg_count;
+	unsigned int		*srt_shards;
+};
+
+struct shard_punch_args {
+	struct shard_auxi_args	 pa_auxi;
+	uuid_t			 pa_coh_uuid;
+	uuid_t			 pa_cont_uuid;
+	daos_obj_punch_t	*pa_api_args;
+	uint64_t		 pa_dkey_hash;
+	daos_epoch_t		 pa_epoch;
+	struct dtx_id		 pa_dti;
+	uint32_t		 pa_opc;
+	uint32_t		 pa_rdg_idx;
+};
+
 static int
 shard_task_reset_target(tse_task_t *shard_task, void *arg)
 {
-	struct shard_auxi_args	*shard_arg;
-	uint32_t		 shard = *(uint32_t *)arg;
+	struct shard_reset_target	*srt = arg;
+	struct shard_auxi_args		*shard;
+	int				 idx;
 
-	shard_arg = tse_task_buf_embedded(shard_task, sizeof(*shard_arg));
-	shard_arg->shard = shard;
-	shard_arg->target = obj_shard2tgtid(shard_arg->obj, shard_arg->shard);
+	if (srt->srt_is_punch) {
+		struct shard_punch_args	*punch;
 
-	return 0;
-}
-
-/* EC struct used to save state during encoding and to drive resource recovery.
- */
-struct ec_params {
-	daos_iod_t		*iods;	/* Replaces iod array in update.
-					 * NULL except head of list
-					 */
-	daos_sg_list_t		*sgls;	/* Replaces sgl array in update.
-					 * NULL except head
-					 */
-	unsigned int		nr;	/* number of records in iods and sgls
-					 * (same as update_t)
-					 */
-	daos_iod_t		niod;	/* replacement IOD for an input IOD
-					 * that includes full stripe.
-					 */
-	daos_sg_list_t		nsgl;	/* replacement SGL for an input IOD that
-					 * includes full stripe.
-					 */
-	struct obj_ec_parity	p_segs;	/* Structure containing array of
-					 * pointers to parity extents.
-					 */
-	struct ec_params        *next;	/* Pointer to next entry in list. */
-};
-
-/* Determines weather a given IOD contains a recx that is at least a full
- * stripe's worth of data.
- */
-static bool
-ec_has_full_stripe(daos_iod_t *iod, struct daos_oclass_attr *oca,
-		   uint64_t *tgt_set)
-{
-	unsigned int	ss = oca->u.ec.e_k * oca->u.ec.e_len;
-	unsigned int	i;
-
-	for (i = 0; i < iod->iod_nr; i++) {
-		if (iod->iod_type == DAOS_IOD_ARRAY) {
-			int start = iod->iod_recxs[i].rx_idx * iod->iod_size;
-			int length = iod->iod_recxs[i].rx_nr * iod->iod_size;
-
-			if (length < ss) {
-				continue;
-			} else if (length - (start % ss) >= ss) {
-				*tgt_set = ~0UL;
-				return true;
-			}
-		} else if (iod->iod_type == DAOS_IOD_SINGLE &&
-			   iod->iod_size >= ss) {
-			*tgt_set = ~0UL;
-			return true;
-		}
-	}
-	return false;
-}
-
-/* Initialize a param structure for an IOD--SGL pair. */
-static void
-ec_init_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl)
-{
-	params->niod		= *iod;
-	params->nsgl		= *sgl;
-	params->nr		= 0;
-	params->niod.iod_recxs	= NULL;
-	params->niod.iod_nr	= 0;
-	params->nsgl.sg_iovs	= NULL;
-	params->nsgl.sg_nr	= 0;
-	params->nsgl.sg_nr_out	= 0;
-	params->p_segs.p_bufs	= NULL;
-	params->p_segs.p_nr	= 0;
-	params->iods		= NULL;
-	params->sgls		= NULL;
-	params->next		= NULL;
-}
-
-/* The head of the params list contains the replacement IOD and SGL arrays.
- * These are used only when stripes have been encoded for the update.
- *
- * Called for head of list only (for the first IOD in the input that contains
- * a full stripe.
- */
-static int
-ec_set_head_params(struct ec_params *head, daos_obj_update_t *args,
-		   unsigned int cnt)
-{
-	unsigned int i;
-
-	D_ALLOC_ARRAY(head->iods, args->nr);
-	if (head->iods == NULL)
-		return -DER_NOMEM;
-	D_ALLOC_ARRAY(head->sgls, args->nr);
-	if (head->sgls == NULL) {
-		D_FREE(head->iods);
-		return -DER_NOMEM;
-	}
-	for (i = 0; i < cnt; i++) {
-		head->iods[i] = args->iods[i];
-		head->sgls[i] = args->sgls[i];
-		head->nr++;
-	}
-	return 0;
-}
-
-/* Moves the SGL "cursors" to the start of a full stripe */
-static void
-ec_move_sgl_cursors(daos_sg_list_t *sgl, size_t size, unsigned int *sg_idx,
-		 size_t *sg_off)
-{
-	if (size < sgl->sg_iovs[*sg_idx].iov_len - *sg_off) {
-		*sg_off += size;
+		punch = tse_task_buf_embedded(shard_task, sizeof(*punch));
+		shard = &punch->pa_auxi;
+		idx = punch->pa_rdg_idx;
 	} else {
-		size_t buf_len = sgl->sg_iovs[*sg_idx].iov_len - *sg_off;
+		struct shard_update_args	*update;
 
-		for (*sg_off = 0; *sg_idx < sgl->sg_nr; (*sg_idx)++) {
-			if (buf_len + sgl->sg_iovs[*sg_idx].iov_len > size) {
-				*sg_off = size - buf_len;
-				break;
-			}
-			buf_len += sgl->sg_iovs[*sg_idx].iov_len;
-		}
+		update = tse_task_buf_embedded(shard_task, sizeof(*update));
+		shard = &update->auxi;
+		idx = 0;
 	}
-}
 
-/* Allocates a stripe's worth of parity cells. */
-static int
-ec_allocate_parity(struct obj_ec_parity *par, unsigned int len, unsigned int p,
-		unsigned int prior_cnt)
-{
-	unsigned char	**nbuf;
-	unsigned int	i;
-	int		rc = 0;
+	D_ASSERT(idx < srt->srt_rdg_count);
 
-	D_REALLOC_ARRAY(nbuf, par->p_bufs, (prior_cnt+p));
-	if (nbuf == NULL)
-		return -DER_NOMEM;
-	else if (nbuf != par->p_bufs)
-		par->p_bufs = nbuf;
+	shard->shard = srt->srt_shards[idx];
+	shard->target = obj_shard2tgtid(shard->obj, shard->shard);
 
-	for (i = prior_cnt; i < prior_cnt+p; i++) {
-		D_ALLOC(par->p_bufs[i], len);
-		if (par->p_bufs[i] == NULL)
-			return -DER_NOMEM;
-		par->p_nr++;
-	}
-	return rc;
-}
-
-/* Encode all of the full stripes contained within the recx at recx_idx.
- */
-static int
-ec_array_encode(struct ec_params *params, daos_obj_id_t oid, daos_iod_t *iod,
-		daos_sg_list_t *sgl, struct daos_oclass_attr *oca,
-		int recx_idx, unsigned int *sg_idx, size_t *sg_off)
-{
-	unsigned long	s_cur;
-	unsigned int	len = oca->u.ec.e_len;
-	unsigned int	k = oca->u.ec.e_k;
-	unsigned int	p = oca->u.ec.e_p;
-	daos_recx_t     this_recx = iod->iod_recxs[recx_idx];
-	unsigned long	recx_start_offset = this_recx.rx_idx * iod->iod_size;
-	unsigned long	recx_end_offset = (this_recx.rx_nr * iod->iod_size) +
-					  recx_start_offset;
-	unsigned int	i;
-	int		rc = 0;
-
-	/* s_cur is the index (in bytes) into the recx where a full stripe
-	 * begins.
-	 */
-	s_cur = recx_start_offset + (recx_start_offset % (len * k));
-	if (s_cur != recx_start_offset)
-		/* if the start of stripe is not at beginning of recx, move
-		 * the sgl index to where the stripe begins).
-		 */
-		ec_move_sgl_cursors(sgl, recx_start_offset % (len * k), sg_idx,
-				    sg_off);
-
-	for ( ; s_cur + len*k <= recx_end_offset; s_cur += len*k) {
-		daos_recx_t *nrecx;
-
-		rc = ec_allocate_parity(&(params->p_segs), len, p,
-					params->niod.iod_nr);
-		if (rc != 0)
-			return rc;
-		rc = obj_encode_full_stripe(oid, sgl, sg_idx, sg_off,
-					    &(params->p_segs),
-					    params->niod.iod_nr);
-		if (rc != 0)
-			return rc;
-		/* Parity is prepended to the recx array, so we have to add
-		 * them here for each encoded stripe.
-		 */
-		D_REALLOC_ARRAY(nrecx, (params->niod.iod_recxs),
-				(params->niod.iod_nr+p));
-		if (nrecx == NULL)
-			return -DER_NOMEM;
-		else if (nrecx != params->niod.iod_recxs)
-			params->niod.iod_recxs = nrecx;
-		for (i = 0; i < p; i++) {
-			params->niod.iod_recxs[params->niod.iod_nr].rx_idx =
-			PARITY_INDICATOR | (s_cur+i*len)/params->niod.iod_size;
-			params->niod.iod_recxs[params->niod.iod_nr++].rx_nr =
-				len / params->niod.iod_size;
-		}
-	}
-	return rc;
-}
-
-/* Updates the params instance for a IOD -- SGL pair.
- * The parity recxs have already been added, this function appends the
- * original recx entries.
- * The parity cells are placed first in the SGL, followed by the
- * input entries.
- */
-static int
-ec_update_params(struct ec_params *params, daos_iod_t *iod, daos_sg_list_t *sgl,
-		 unsigned int len)
-{
-	daos_recx_t	*nrecx;
-	unsigned int	 i;
-	int		 rc = 0;
-
-	D_REALLOC_ARRAY(nrecx, (params->niod.iod_recxs),
-			(params->niod.iod_nr + iod->iod_nr));
-	if (nrecx == NULL)
-		return -DER_NOMEM;
-	else if (nrecx != params->niod.iod_recxs)
-		params->niod.iod_recxs = nrecx;
-	for (i = 0; i < iod->iod_nr; i++)
-		params->niod.iod_recxs[params->niod.iod_nr++] =
-			iod->iod_recxs[i];
-
-	D_ALLOC_ARRAY(params->nsgl.sg_iovs, (params->p_segs.p_nr + sgl->sg_nr));
-	if (params->nsgl.sg_iovs == NULL)
-		return -DER_NOMEM;
-	for (i = 0; i < params->p_segs.p_nr; i++) {
-		params->nsgl.sg_iovs[i].iov_buf = params->p_segs.p_bufs[i];
-		params->nsgl.sg_iovs[i].iov_buf_len = len;
-		params->nsgl.sg_iovs[i].iov_len = len;
-		params->nsgl.sg_nr++;
-	}
-	for (i = 0; i < sgl->sg_nr; i++)
-		params->nsgl.sg_iovs[params->nsgl.sg_nr++] = sgl->sg_iovs[i];
-
-	return rc;
-}
-
-/* Call-back that recovers EC allocated memory  */
-static int
-ec_free_params_cb(tse_task_t *task, void *data)
-{
-	struct ec_params *head = *((struct ec_params **)data);
-	int		  rc = task->dt_result;
-
-	D_FREE(head->iods);
-	D_FREE(head->sgls);
-	while (head != NULL) {
-		int i;
-		struct ec_params *current = head;
-
-		D_FREE(current->niod.iod_recxs);
-		D_FREE(current->nsgl.sg_iovs);
-		for (i = 0; i < current->p_segs.p_nr; i++)
-			D_FREE(current->p_segs.p_bufs[i]);
-		D_FREE(current->p_segs.p_bufs);
-		head = current->next;
-		D_FREE(current);
-	}
-	return rc;
-}
-
-/* Identifies the applicable subset of forwarding targets for non-full-stripe
- * EC updates.
- */
-static void
-ec_init_tgt_set(daos_iod_t *iods, unsigned int nr,
-		struct daos_oclass_attr *oca, unsigned long *tgt_set)
-{
-	unsigned int    len = oca->u.ec.e_len;
-	unsigned int    k = oca->u.ec.e_k;
-	unsigned int    p = oca->u.ec.e_p;
-	unsigned long	par_only = (1UL << p) - 1;
-	unsigned long	full = (1UL <<  (k+p)) - 1;
-	unsigned int	i, j;
-
-	for (i = 0; i < p; i++)
-		*tgt_set |= 1UL << i;
-	for (i = 0; i < nr; i++) {
-		if (iods->iod_type != DAOS_IOD_ARRAY)
-			continue;
-		for (j = 0; j < iods[i].iod_nr; j++) {
-			unsigned long ext_idx;
-			unsigned long rs = iods[i].iod_recxs[j].rx_idx *
-						iods[i].iod_size;
-			unsigned long re = iods[i].iod_recxs[j].rx_nr *
-						iods[i].iod_size + rs - 1;
-
-			/* No partial-parity updates, so this function won't be
-			 * called if parity is present.
-			 */
-			D_ASSERT(!(PARITY_INDICATOR & rs));
-			for (ext_idx = rs; ext_idx <= re; ext_idx += len) {
-				unsigned int cell = ext_idx/len;
-
-				*tgt_set |= 1UL << (cell+p);
-				if (*tgt_set == full) {
-					*tgt_set = 0;
-					return;
-				}
-			}
-		}
-	}
-	/* In case it's a single value, set the tgt_set to send to all.
-	 * These go everywhere for now.
-	 */
-	if (*tgt_set == par_only)
-		*tgt_set = 0;
-}
-
-/* Iterates over the IODs in the update, encoding all full stripes contained
- * within each recx.
- */
-static int
-ec_obj_update(tse_task_t *task, daos_obj_id_t oid, daos_oclass_attr_t *oca,
-	      uint64_t *tgt_set)
-{
-	daos_obj_update_t	*args = dc_task_get_args(task);
-	struct ec_params	*head = NULL;
-	struct ec_params	*current = NULL;
-	unsigned int		 i, j;
-	int			 rc = 0;
-
-	for (i = 0; i < args->nr; i++) {
-		if (ec_has_full_stripe(&(args->iods[i]), oca, tgt_set)) {
-			struct ec_params *params;
-
-			D_ALLOC_PTR(params);
-			if (params == NULL) {
-				rc = -DER_NOMEM;
-				break;
-			}
-			ec_init_params(params, &args->iods[i], &args->sgls[i]);
-			if (head == NULL) {
-				head = params;
-				current = head;
-				rc = ec_set_head_params(head, args, i);
-				if (rc != 0)
-					break;
-			} else {
-				current->next = params;
-				current = params;
-			}
-			if (args->iods[i].iod_type == DAOS_IOD_ARRAY) {
-				unsigned int sg_idx = 0;
-				size_t sg_off = 0;
-
-				for (j = 0; j < args->iods[i].iod_nr; j++) {
-					rc = ec_array_encode(params, oid,
-							     &args->iods[i],
-							     &args->sgls[i],
-							     oca, j, &sg_idx,
-							     &sg_off);
-					if (rc != 0)
-						break;
-				}
-				rc = ec_update_params(params, &args->iods[i],
-						      &args->sgls[i],
-						      oca->u.ec.e_len);
-				head->iods[i] = params->niod;
-				head->sgls[i] = params->nsgl;
-				D_ASSERT(head->nr == i);
-				head->nr++;
-			} else {
-				D_ASSERT(args->iods[i].iod_type ==
-					 DAOS_IOD_SINGLE &&
-					 args->iods[i].iod_size >=
-					 oca->u.ec.e_len * oca->u.ec.e_k);
-				/* Encode single value */
-			}
-		} else if (head != NULL && &(head->sgls[i]) != NULL) {
-			/* Add sgls[i] and iods[i] to head. Since we're
-			 * adding ec parity (head != NULL) and thus need to
-			 * replace the arrays in the update struct.
-			 */
-			head->iods[i] = args->iods[i];
-			head->sgls[i] = args->sgls[i];
-			D_ASSERT(head->nr == i);
-			head->nr++;
-		}
-	}
-	if (rc != 0 && head != NULL) {
-		D_FREE(head->iods);
-		D_FREE(head->sgls);
-		while (head != NULL) {
-			current = head;
-			D_FREE(current->niod.iod_recxs);
-			D_FREE(current->nsgl.sg_iovs);
-			for (i = 0; i < current->p_segs.p_nr; i++)
-				D_FREE(current->p_segs.p_bufs[i]);
-			D_FREE(current->p_segs.p_bufs);
-			head = current->next;
-			D_FREE(current);
-		}
-	} else if (head != NULL) {
-		args->iods = head->iods;
-		args->sgls = head->sgls;
-		 tse_task_register_comp_cb(task, ec_free_params_cb, &head,
-					  sizeof(head));
-	}
-	return rc;
+	return 0;
 }
 
 int
@@ -1937,6 +1584,7 @@ dc_obj_update(tse_task_t *task)
 	tse_sched_t		*sched = tse_task2sched(task);
 	struct obj_auxi_args	*obj_auxi;
 	struct dc_object	*obj;
+	struct daos_oclass_attr *oca;
 	d_list_t		*head = NULL;
 	unsigned int		shard;
 	unsigned int		start_shard;
@@ -1969,28 +1617,12 @@ dc_obj_update(tse_task_t *task)
 		goto out_task;
 	}
 
-	struct daos_oclass_attr *oca =
-				daos_oclass_attr_find(obj->cob_md.omd_id);
+	oca = daos_oclass_attr_find(obj->cob_md.omd_id);
 	if (oca->ca_resil == DAOS_RES_EC) {
-		rc = ec_obj_update(task, obj->cob_md.omd_id, oca, &tgt_set);
+		rc = ec_obj_update_encode(task, obj->cob_md.omd_id, oca,
+					  &tgt_set);
 		if (rc != 0)
 			goto out_task;
-		/* If a full stripe, ec_obj_update sets tgt_set to all 1s. */
-		if (tgt_set != 0) {
-			/* tgt_set == 0 means send to all forwarding targets
-			 * from leader. If it's not zero here, it means that
-			 * ec_object_update encoded a full stripe. Hence
-			 * the update should go to all targets.
-			 */
-			tgt_set = 0;
-		} else {
-			/* Called for updates with no full stripes.
-			 * Builds a bit map only if forwarding targets are
-			 * a proper subset. Sets tgt_set to zero if all targets
-			 * are addressed.
-			 */
-			ec_init_tgt_set(args->iods, args->nr, oca, &tgt_set);
-		}
 	}
 
 	obj_auxi = tse_task_stack_push(task, sizeof(*obj_auxi));
@@ -2015,10 +1647,14 @@ dc_obj_update(tse_task_t *task)
 		goto out_task;
 	start_shard = shard;
 
-	D_DEBUG(DB_IO, "update "DF_OID" start %u cnt %u\n",
-		DP_OID(obj->cob_md.omd_id), shard, shards_cnt);
+	D_DEBUG(DB_IO, "update "DF_OID" dkey %llu start %u cnt %u\n",
+		DP_OID(obj->cob_md.omd_id), (unsigned long long)dkey_hash,
+		shard, shards_cnt);
+	obj_auxi->fw_shard_tgts = &obj_auxi->fw_shard_tgts_inline;
+	obj_auxi->fw_cnt = &obj_auxi->fw_cnt_inline;
+	obj_auxi->fw_rdg_count = 1;
 	rc = obj_shards_2_fwtgts(obj, map_ver, tgt_set, &shard, &shards_cnt,
-				 &obj_auxi->fw_shard_tgts, &obj_auxi->fw_cnt);
+				 obj_auxi->fw_shard_tgts, obj_auxi->fw_cnt);
 	if (rc != 0) {
 		D_ERROR("update "DF_OID", obj_shards_2_fwtgts failed %d.\n",
 			DP_OID(obj->cob_md.omd_id), rc);
@@ -2042,9 +1678,15 @@ dc_obj_update(tse_task_t *task)
 		obj_auxi->flags = ORF_RESEND;
 
 		/* The RPC may need to be resent to new leader. */
-		if (srv_io_dispatch)
+		if (srv_io_dispatch) {
+			struct shard_reset_target	srt;
+
+			srt.srt_is_punch = 0;
+			srt.srt_rdg_count = 1;
+			srt.srt_shards = &shard;
 			tse_task_list_traverse(head, shard_task_reset_target,
-					       &shard);
+					       &srt);
+		}
 
 		goto task_sched;
 	}
@@ -2102,7 +1744,7 @@ dc_obj_list_internal(daos_handle_t oh, uint32_t op, daos_handle_t th,
 		     daos_key_t *dkey, daos_key_t *akey,
 		     daos_iod_type_t type, daos_size_t *size,
 		     uint32_t *nr, daos_key_desc_t *kds,
-		     daos_sg_list_t *sgl, daos_recx_t *recxs,
+		     d_sg_list_t *sgl, daos_recx_t *recxs,
 		     daos_epoch_range_t *eprs, daos_anchor_t *anchor,
 		     daos_anchor_t *dkey_anchor, daos_anchor_t *akey_anchor,
 		     bool incr_order, tse_task_t *task)
@@ -2127,7 +1769,7 @@ dc_obj_list_internal(daos_handle_t oh, uint32_t op, daos_handle_t th,
 		if (rc != -DER_INVAL)
 			goto out_task;
 		/* FIXME: until distributed transaction. */
-		epoch = daos_ts2epoch();
+		epoch = DAOS_EPOCH_MAX; /* = daos_ts2epoch();*/
 		D_DEBUG(DB_IO, "set epoch "DF_U64"\n", epoch);
 	}
 	D_ASSERT(epoch);
@@ -2273,17 +1915,6 @@ dc_obj_list_rec(tse_task_t *task)
 				    task);
 }
 
-struct shard_punch_args {
-	struct shard_auxi_args	 pa_auxi;
-	uuid_t			 pa_coh_uuid;
-	uuid_t			 pa_cont_uuid;
-	daos_obj_punch_t	*pa_api_args;
-	uint64_t		 pa_dkey_hash;
-	daos_epoch_t		 pa_epoch;
-	struct dtx_id		 pa_dti;
-	uint32_t		 pa_opc;
-};
-
 static int
 shard_punch_task(tse_task_t *task)
 {
@@ -2291,6 +1922,7 @@ shard_punch_task(tse_task_t *task)
 	daos_obj_punch_t		*api_args;
 	struct dc_object		*obj;
 	struct dc_obj_shard		*obj_shard;
+	uint32_t			 idx;
 	int				 rc;
 
 	args = tse_task_buf_embedded(task, sizeof(*args));
@@ -2310,12 +1942,13 @@ shard_punch_task(tse_task_t *task)
 	tse_task_stack_push_data(task, &args->pa_dkey_hash,
 				 sizeof(args->pa_dkey_hash));
 	api_args = args->pa_api_args;
+	idx = args->pa_rdg_idx;
 	rc = dc_obj_shard_punch(obj_shard, args->pa_opc, args->pa_epoch,
 				api_args->dkey, api_args->akeys,
 				api_args->akey_nr, args->pa_coh_uuid,
 				args->pa_cont_uuid, &args->pa_auxi.map_ver,
-				args->pa_auxi.obj_auxi->fw_shard_tgts,
-				args->pa_auxi.obj_auxi->fw_cnt, task,
+				args->pa_auxi.obj_auxi->fw_shard_tgts[idx],
+				args->pa_auxi.obj_auxi->fw_cnt[idx], task,
 				&args->pa_dti, args->pa_auxi.obj_auxi->flags);
 
 	obj_shard_close(obj_shard);
@@ -2333,9 +1966,11 @@ obj_punch_internal(tse_task_t *api_task, enum obj_rpc_opc opc,
 	daos_handle_t		 coh;
 	uuid_t			 coh_uuid;
 	uuid_t			 cont_uuid;
-	unsigned int		 shard_first;
+	unsigned int		 shard_first_inline;
 	unsigned int		 shard_nr;
 	unsigned int		 map_ver;
+	unsigned int		 grps = 1;
+	unsigned int		 *shard_first = &shard_first_inline;
 	uint64_t		 dkey_hash = 0;
 	daos_epoch_t		 epoch;
 	int			 i = 0;
@@ -2385,26 +2020,91 @@ obj_punch_internal(tse_task_t *api_task, enum obj_rpc_opc opc,
 		goto out_task;
 
 	if (opc == DAOS_OBJ_RPC_PUNCH) {
-		obj_ptr2shards(obj, &shard_first, &shard_nr);
+		int	grp_size;
+
+		obj_ptr2shards(obj, shard_first, &shard_nr);
+		if (!srv_io_dispatch || shard_nr == 1)
+			goto single_rdg;
+
+		grp_size = obj_get_grp_size(obj);
+		grps = shard_nr / grp_size;
+		D_ASSERT(grps >= 1);
+		D_ASSERT(grp_size * grps == shard_nr);
+
+		if (grps == 1)
+			goto single_rdg;
+
+		/* XXX: Punch object with multiple stripes is some complex.
+		 *	It is possible that these stripes belong to multiple
+		 *	redundancy groups. According to current DTX mechanism,
+		 *	the OBJ_PUNCH RPC needs to be sent to every leader of
+		 *	related redundancy groups by the client. But there is
+		 *	no guarantee that all related redundancy groups can
+		 *	punch related stripe successfully. So under some bad
+		 *	cases, the object may be partially punched. The issue
+		 *	will be resolved via DAOS distributed transaction in
+		 *	the future.
+		 */
+		D_ALLOC_ARRAY(shard_first, grps);
+		if (shard_first == NULL)
+			D_GOTO(out_task, rc = -DER_NOMEM);
+
+		obj_auxi->fw_rdg_count = grps;
+		D_ALLOC_ARRAY(obj_auxi->fw_shard_tgts, grps);
+		if (obj_auxi->fw_shard_tgts == NULL)
+			D_GOTO(out_task, rc = -DER_NOMEM);
+
+		D_ALLOC_ARRAY(obj_auxi->fw_cnt, grps);
+		if (obj_auxi->fw_cnt == NULL)
+			D_GOTO(out_task, rc = -DER_NOMEM);
+
+		for (i = 0; i < grps; i++) {
+			shard_first[i] = i * grp_size;
+			shard_nr = grp_size;
+			rc = obj_shards_2_fwtgts(obj, map_ver, 0UL,
+						 &shard_first[i], &shard_nr,
+						 &obj_auxi->fw_shard_tgts[i],
+						 &obj_auxi->fw_cnt[i]);
+			if (rc != 0) {
+				D_ERROR("punch "DF_OID
+					", obj_shards_2_fwtgts failed(1) %d.\n",
+					DP_OID(obj->cob_md.omd_id), rc);
+				goto out_task;
+			}
+
+			D_ASSERT(shard_nr == 1);
+		}
+
+		shard_nr = grps;
+		goto fw_prepared;
 	} else {
 		D_ASSERTF(api_args->dkey != NULL, "NULL dkey\n");
 
 		dkey_hash = obj_dkey2hash(api_args->dkey);
 		rc = obj_dkeyhash2update_grp(obj, dkey_hash, map_ver,
-					     &shard_first, &shard_nr);
+					     shard_first, &shard_nr);
 		if (rc != 0)
 			goto out_task;
 	}
-	D_DEBUG(DB_IO, "punch "DF_OID" start %u cnt %u\n",
-		DP_OID(obj->cob_md.omd_id), shard_first, shard_nr);
-	rc = obj_shards_2_fwtgts(obj, map_ver, 0UL, &shard_first, &shard_nr,
-				 &obj_auxi->fw_shard_tgts, &obj_auxi->fw_cnt);
+
+single_rdg:
+	D_DEBUG(DB_IO, "punch "DF_OID" dkey %llu start %u cnt %u\n",
+		DP_OID(obj->cob_md.omd_id), (unsigned long long)dkey_hash,
+		*shard_first, shard_nr);
+
+	obj_auxi->fw_shard_tgts = &obj_auxi->fw_shard_tgts_inline;
+	obj_auxi->fw_cnt = &obj_auxi->fw_cnt_inline;
+	obj_auxi->fw_rdg_count = 1;
+	rc = obj_shards_2_fwtgts(obj, map_ver, 0UL, shard_first, &shard_nr,
+				 obj_auxi->fw_shard_tgts,
+				 obj_auxi->fw_cnt);
 	if (rc != 0) {
 		D_ERROR("punch "DF_OID", obj_shards_2_fwtgts failed %d.\n",
 			DP_OID(obj->cob_md.omd_id), rc);
 		goto out_task;
 	}
 
+fw_prepared:
 	obj_auxi->map_ver_req = map_ver;
 	obj_auxi->obj_task = api_task;
 	head = &obj_auxi->shard_task_head;
@@ -2413,9 +2113,15 @@ obj_punch_internal(tse_task_t *api_task, enum obj_rpc_opc opc,
 		obj_auxi->flags = ORF_RESEND;
 
 		/* The RPC may need to be resent to new leader. */
-		if (srv_io_dispatch)
+		if (srv_io_dispatch) {
+			struct shard_reset_target	srt;
+
+			srt.srt_is_punch = 1;
+			srt.srt_rdg_count = grps;
+			srt.srt_shards = shard_first;
 			tse_task_list_traverse(head, shard_task_reset_target,
-					       &shard_first);
+					       &srt);
+		}
 
 		goto task_sched;
 	}
@@ -2431,7 +2137,10 @@ obj_punch_internal(tse_task_t *api_task, enum obj_rpc_opc opc,
 			goto out_task;
 
 		args = tse_task_buf_embedded(task, sizeof(*args));
-		shard			= shard_first + i;
+		if (shard_first != &shard_first_inline)
+			shard		= shard_first[i];
+		else
+			shard		= shard_first_inline + i;
 		args->pa_api_args	= api_args;
 		args->pa_epoch		= epoch;
 		daos_dti_gen(&args->pa_dti, !srv_io_dispatch);
@@ -2442,6 +2151,10 @@ obj_punch_internal(tse_task_t *api_task, enum obj_rpc_opc opc,
 		args->pa_auxi.obj_auxi	= obj_auxi;
 		args->pa_opc		= opc;
 		args->pa_dkey_hash	= dkey_hash;
+		if (shard_first != &shard_first_inline)
+			args->pa_rdg_idx = i;
+		else
+			args->pa_rdg_idx = 0;
 		uuid_copy(args->pa_coh_uuid, coh_uuid);
 		uuid_copy(args->pa_cont_uuid, cont_uuid);
 
@@ -2456,6 +2169,9 @@ obj_punch_internal(tse_task_t *api_task, enum obj_rpc_opc opc,
 	}
 
 task_sched:
+	if (shard_first != &shard_first_inline && shard_first != NULL)
+		D_FREE(shard_first);
+
 	obj_shard_task_sched(obj_auxi);
 	return rc;
 
@@ -2464,6 +2180,9 @@ out_task:
 		tse_task_complete(api_task, rc);
 	else
 		tse_task_list_traverse(head, shard_task_abort, &rc);
+
+	if (shard_first != &shard_first_inline && shard_first != NULL)
+		D_FREE(shard_first);
 
 	return rc;
 }
@@ -2662,7 +2381,8 @@ dc_obj_query_key(tse_task_t *api_task)
 	if (rc) {
 		if (rc != -DER_INVAL)
 			goto out_task;
-		epoch = daos_ts2epoch();
+		/* FIXME: until distributed transaction. */
+		epoch = DAOS_EPOCH_MAX; /* = daos_ts2epoch();*/
 		D_DEBUG(DB_IO, "set epoch "DF_U64"\n", epoch);
 	}
 	D_ASSERT(epoch);
