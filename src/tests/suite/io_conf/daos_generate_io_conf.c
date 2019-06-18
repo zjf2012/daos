@@ -46,7 +46,6 @@ static char *obj_class;
 enum op {
 	UPDATE_ARRAY,
 	PUNCH_ARRAY,
-	UPDATE_SINGLE,
 	PUNCH_AKEY,
 	FETCH,
 	MAX_OPS,
@@ -240,26 +239,6 @@ _punch_akey(int index, daos_epoch_t eph, struct extent *extents,
 	return 0;
 }
 
-/* Update single record */
-static int
-update_single(int index, daos_epoch_t eph, struct extent *extents,
-	      int extents_num, int rec_size, struct records *records,
-	      char *output_buf)
-{
-	char value = 'a' + rand() % ('z' - 'a');
-
-	/* Insert extents to records */
-	records[index].eph = eph;
-	records[index].records_num = 1;
-
-	records[index].records[0].type = SINGLE;
-	records[index].records[0].single.value = value;
-
-	sprintf(output_buf, "update --epoch "DF_U64" --single --value %d\n",
-		eph, value);
-
-	return 0;
-}
 
 static int
 fetch_array(int index, daos_epoch_t eph, struct extent *extents,
@@ -290,15 +269,15 @@ fetch_array(int index, daos_epoch_t eph, struct extent *extents,
 	}
 
 	if (rec_length == 0) {
-		sprintf(output_buf, "fetch --epoch "DF_U64" -s -v --value 0\n",
+		sprintf(output_buf, "fetch --epoch "DF_U64" -s  --value 0\n",
 			record->eph);
 	} else {
 		if (record->records[0].type == SINGLE)
-			sprintf(output_buf, "fetch --epoch "DF_U64" -v --single"
+			sprintf(output_buf, "fetch --epoch "DF_U64"  --single"
 				" --value %d\n", record->eph,
 				record->records[0].single.value);
 		else
-			sprintf(output_buf, "fetch --epoch "DF_U64" -v --recx"
+			sprintf(output_buf, "fetch --epoch "DF_U64"  --recx"
 				" \"%s\"\n", record->eph, rec_buf);
 	}
 
@@ -329,9 +308,9 @@ struct operation operations[] = {
 	[PUNCH_ARRAY] = {
 		.op = &punch_array,
 	},
-	[UPDATE_SINGLE] = {
+	/*[UPDATE_SINGLE] = {
 		.op = &update_single,
-	},
+	},*/
 	[PUNCH_AKEY] = {
 		.op = &_punch_akey,
 	},
@@ -391,7 +370,7 @@ generate_io_conf_rec(int fd, struct current_status *status)
 	}
 
 	eph = status->cur_eph;
-	inject_fail_idx = rand() % epoch_times;
+	inject_fail_idx = 982373497;
 	tgt = rand() % tgt_size;
 	for (i = 0; i < epoch_times; i++) {
 		char	buffer[512];
@@ -419,13 +398,13 @@ generate_io_conf_rec(int fd, struct current_status *status)
 		}
 	}
 
-	/* Add back the target */
+	/* Add back the target
 	sprintf(line, "add --rank %d --tgt %d\n", status->cur_rank, tgt);
 	rc1 = write(fd, line, strlen(line));
 	if (rc1 <= 0) {
 		rc = -1;
 		goto out;
-	}
+	}*/
 
 	sprintf(line, "pool --query\n");
 	rc = write(fd, line, strlen(line));
@@ -490,19 +469,19 @@ generate_io_conf_dkey(int fd, struct current_status *status)
 int
 generate_io_conf_obj(int fd, struct current_status *status)
 {
-	char oid_buf[64];
+	//char oid_buf[64];
 	int rc = 0;
 
 	while (status->cur_obj_num < obj_num) {
 		int	rank = -1;
 
-		/* Fill the dkey first */
+		/* Fill the dkey first
 		sprintf(oid_buf, "oid --type %s --rank %d\n", obj_class, rank);
 		rc = write(fd, oid_buf, strlen(oid_buf));
 		if (rc <= 0) {
 			rc = -1;
 			break;
-		}
+		}*/
 
 		status->cur_rank = rank;
 
