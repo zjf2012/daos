@@ -5,13 +5,14 @@ def scons():
     """Execute build"""
     Import('env', 'prereqs')
 
-    libs = ['daos', 'daos_common', 'gurt', 'cart',
+    libs = ['daos', 'daos_common', 'gurt', 'cart', 'dfs',
             'mpi', 'uuid', 'cmocka']
 
     denv = env.Clone()
 
     # Add runtime paths for daos libraries
     denv.AppendUnique(RPATH=[Literal(r'\$$ORIGIN/../lib/daos_srv')])
+    denv.AppendUnique(LIBPATH=["../client/dfs"])
 
     denv.Append(CPPPATH=[Dir('suite').srcnode()])
     prereqs.require(denv, 'ompi', 'argobots')
@@ -26,6 +27,10 @@ def scons():
     daos_perf = daos_build.program(denv, 'daos_perf',
                                    ['daos_perf.c', dts_common], LIBS=libs)
     denv.Install('$PREFIX/bin/', daos_perf)
+
+    replicator = daos_build.program(denv, 'replicator',
+                                   ['replicator.c', dts_common], LIBS=libs)
+    denv.Install('$PREFIX/bin/', replicator)
 
     obj_ctl = daos_build.program(denv, 'obj_ctl', ['obj_ctl.c', dts_common],
                                  LIBS=libs)
