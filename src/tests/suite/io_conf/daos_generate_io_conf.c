@@ -51,6 +51,13 @@ enum op {
 	MAX_OPS,
 };
 
+enum single_record_op {
+	UPDATE_SINGLE,
+	PUNCH_AKEY_SINGLE,
+	FETCH_SINGLE,
+	MAX_OPS_SINGLE,
+};
+
 enum type {
 	SINGLE,
 	ARRAY,
@@ -239,6 +246,26 @@ _punch_akey(int index, daos_epoch_t eph, struct extent *extents,
 	return 0;
 }
 
+/* Update single record */
+static int
+update_single(int index, daos_epoch_t eph, struct extent *extents,
+	      int extents_num, int rec_size, struct records *records,
+	      char *output_buf)
+{
+	char value = 'a' + rand() % ('z' - 'a');
+
+	/* Insert extents to records */
+	records[index].eph = eph;
+	records[index].records_num = 1;
+
+	records[index].records[0].type = SINGLE;
+	records[index].records[0].single.value = value;
+
+	sprintf(output_buf, "update --epoch "DF_U64" --single --value %d\n",
+		eph, value);
+
+	return 0;
+}
 
 static int
 fetch_array(int index, daos_epoch_t eph, struct extent *extents,
@@ -269,22 +296,22 @@ fetch_array(int index, daos_epoch_t eph, struct extent *extents,
 	}
 
 	if (rec_length == 0) {
-		sprintf(output_buf, "fetch --epoch "DF_U64" -s  --value 0\n",
+		sprintf(output_buf, "fetch --epoch "DF_U64" -s -v --value 0\n",
 			record->eph);
 	} else {
 		if (record->records[0].type == SINGLE)
-			sprintf(output_buf, "fetch --epoch "DF_U64"  --single"
+			sprintf(output_buf, "fetch --epoch "DF_U64" -v --single"
 				" --value %d\n", record->eph,
 				record->records[0].single.value);
 		else
-			sprintf(output_buf, "fetch --epoch "DF_U64"  --recx"
+			sprintf(output_buf, "fetch --epoch "DF_U64" -v --recx"
 				" \"%s\"\n", record->eph, rec_buf);
 	}
 
 	return 0;
 }
 
-int choose_op(int index)
+int choose_op(int index, int max_operation)
 {
 	if (index == 0)
 		return UPDATE_ARRAY;
@@ -292,7 +319,7 @@ int choose_op(int index)
 	/* FIXME: it should be able to specify the percentage
 	 * of each operation to generate the special workload.
 	 */
-	return rand() % MAX_OPS;
+	return rand() % max_operation;
 }
 
 struct operation {
@@ -308,14 +335,26 @@ struct operation operations[] = {
 	[PUNCH_ARRAY] = {
 		.op = &punch_array,
 	},
-	/*[UPDATE_SINGLE] = {
-		.op = &update_single,
-	},*/
 	[PUNCH_AKEY] = {
 		.op = &_punch_akey,
 	},
 	[FETCH] = {
 		.op = &fetch_array,
+	},
+};
+
+struct operation single_operations[] = {
+    [UPDATE_SINGLE] =
+	{
+	    .op = &update_single,
+	},
+	[PUNCH_AKEY_SINGLE] =
+	{
+	    .op = &_punch_akey,
+	},
+	[FETCH_SINGLE] =
+	{
+	    .op = &fetch_array,
 	},
 };
 
@@ -350,6 +389,7 @@ generate_io_conf_rec(int fd, struct current_status *status)
 	int		rc1;
 	int		rc = 0;
 	int		tgt;
+	int     op;
 
 	sprintf(line, "iod_size %d\n", iod_size);
 	rc1 = write(fd, line, strlen(line));
@@ -370,14 +410,22 @@ generate_io_conf_rec(int fd, struct current_status *status)
 	}
 
 	eph = status->cur_eph;
-	inject_fail_idx = 982373497;
+	inject_fail_idx = rand() % epoch_times;
 	tgt = rand() % tgt_size;
+	enum type record_type = rand() % 2;
 	for (i = 0; i < epoch_times; i++) {
 		char	buffer[512];
-		int	op = choose_op(i);
 
-		rc = (*operations[op].op)(i, eph + i, extents, extent_num,
-					  1, recs, buffer);
+		if (record_type == ARRAY) {
+			op = choose_op(i, MAX_OPS);
+			rc = (*operations[op].op)(i, eph + i, extents,
+						  extent_num, 1, recs, buffer);
+		}	
+		else {
+			op = choose_op(i, MAX_OPS_SINGLE);
+			rc = (*single_operations[op].op)(i, eph + i, extents,
+				extent_num, 1, recs, buffer);
+			}
 		if (rc)
 			goto out;
 
@@ -390,15 +438,15 @@ generate_io_conf_rec(int fd, struct current_status *status)
 		if (inject_fail_idx == i) {
 			sprintf(line, "exclude --rank %d --tgt %d\n",
 				status->cur_rank, tgt);
-			rc = write(fd, line, strlen(line));
+			/*rc = write(fd, line, strlen(line));  SAMIR
 			if (rc <= 0) {
 				rc = -1;
 				goto out;
-			}
+			}*/
 		}
 	}
 
-	/* Add back the target
+	/* Add back the target SAMIR 
 	sprintf(line, "add --rank %d --tgt %d\n", status->cur_rank, tgt);
 	rc1 = write(fd, line, strlen(line));
 	if (rc1 <= 0) {
@@ -469,14 +517,15 @@ generate_io_conf_dkey(int fd, struct current_status *status)
 int
 generate_io_conf_obj(int fd, struct current_status *status)
 {
-	//char oid_buf[64];
+	char oid_buf[64];
 	int rc = 0;
 
 	while (status->cur_obj_num < obj_num) {
 		int	rank = -1;
 
-		/* Fill the dkey first
+		/* Fill the dkey first*/
 		sprintf(oid_buf, "oid --type %s --rank %d\n", obj_class, rank);
+		/* --SAMIR-- 
 		rc = write(fd, oid_buf, strlen(oid_buf));
 		if (rc <= 0) {
 			rc = -1;
