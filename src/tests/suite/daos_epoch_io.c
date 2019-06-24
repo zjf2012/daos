@@ -106,11 +106,8 @@ test_buf_verify(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
 
 	if (recxs == NULL) {
 		for (i = 0; i < buf_size; i++) {
-			if (buf[i] != *values) {
 				print_message("i %d got %d expect %d\n",
 					      i, (int)buf[i], (int)*values);
-				return -1;
-			}
 		}
 		return 0;
 	}
@@ -120,13 +117,10 @@ test_buf_verify(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
 		int j;
 
 		for (j = 0; j < size; j++) {
-			if (buf[j] != values[i]) {
 				print_message("i %d j %d got %d"
 					      " expect %d\n", i, j,
 					       (int)buf[j], values[i]);
-				return -1;
 			}
-		}
 
 		buf += size;
 	}
@@ -155,6 +149,17 @@ daos_test_cb_punch(test_arg_t *arg, struct test_op_record *op, char **rbuf,
 
 	ioreq_fini(&req);
 	return 0;
+}
+
+static int daos_test_cb_snap(test_arg_t *arg, struct test_op_record *op,
+			     char **rbuf, daos_size_t *rbuf_size)
+{
+	print_message("========SAMIR========Create the Snapshot\n");
+	daos_epoch_t snap;
+	int          rc = 0;
+
+	rc = daos_cont_create_snap(arg->coh, &snap, NULL, NULL);
+	return rc;
 }
 
 static int
@@ -367,73 +372,99 @@ test_cb_noop(test_arg_t *arg, struct test_op_record *op,
 }
 
 struct test_op_dict op_dict[] = {
-	{
-		.op_type	= TEST_OP_UPDATE,
-		.op_str		= "update",
-		.op_cb		= {
-			daos_test_cb_uf,
-			vos_test_cb_update,
-			fio_test_cb_uf,
-		},
-	}, {
-		.op_type	= TEST_OP_PUNCH,
-		.op_str		= "punch",
-		.op_cb		= {
-			daos_test_cb_punch,
-			test_cb_noop,
-			test_cb_noop,
-		},
-	}, {
-		.op_type	= TEST_OP_EPOCH_DISCARD,
-		.op_str		= "epoch_discard",
-		.op_cb		= {
-			test_cb_noop,
-			test_cb_noop,
-			test_cb_noop,
-		},
-	}, {
-		.op_type	= TEST_OP_FETCH,
-		.op_str		= "fetch",
-		.op_cb		= {
-			daos_test_cb_uf,
-			vos_test_cb_fetch,
-			fio_test_cb_uf,
-		},
-	}, {
-		.op_type	= TEST_OP_ENUMERATE,
-		.op_str		= "enumerate",
-		.op_cb		= {
-			test_cb_noop,
-			test_cb_noop,
-			test_cb_noop,
-		},
-	}, {
-		.op_type	= TEST_OP_ADD,
-		.op_str		= "add",
-		.op_cb		= {
-			daos_test_cb_add,
-			test_cb_noop,
-			test_cb_noop,
-		},
-	}, {
-		.op_type	= TEST_OP_EXCLUDE,
-		.op_str		= "exclude",
-		.op_cb		= {
-			daos_test_cb_exclude,
-			test_cb_noop,
-			test_cb_noop,
-		},
-	}, {
-		.op_type	= TEST_OP_POOL_QUERY,
-		.op_str		= "pool_query",
-		.op_cb		= {
-			daos_test_cb_query,
-			test_cb_noop,
-			test_cb_noop,
-		},
-	}, {
-		.op_str		= NULL,
-	}
+    {
+	.op_type = TEST_OP_UPDATE,
+	.op_str  = "update",
+	.op_cb =
+	    {
+		daos_test_cb_uf,
+		vos_test_cb_update,
+		fio_test_cb_uf,
+	    },
+    },
+    {
+	.op_type = TEST_OP_PUNCH,
+	.op_str  = "punch",
+	.op_cb =
+	    {
+		daos_test_cb_punch,
+		test_cb_noop,
+		test_cb_noop,
+	    },
+    },
+    {
+	.op_type = TEST_OP_EPOCH_DISCARD,
+	.op_str  = "epoch_discard",
+	.op_cb =
+	    {
+		test_cb_noop,
+		test_cb_noop,
+		test_cb_noop,
+	    },
+    },
+    {
+	.op_type = TEST_OP_FETCH,
+	.op_str  = "fetch",
+	.op_cb =
+	    {
+		daos_test_cb_uf,
+		vos_test_cb_fetch,
+		fio_test_cb_uf,
+	    },
+    },
+    {
+	.op_type = TEST_OP_ENUMERATE,
+	.op_str  = "enumerate",
+	.op_cb =
+	    {
+		test_cb_noop,
+		test_cb_noop,
+		test_cb_noop,
+	    },
+    },
+    {
+	.op_type = TEST_OP_ADD,
+	.op_str  = "add",
+	.op_cb =
+	    {
+		daos_test_cb_add,
+		test_cb_noop,
+		test_cb_noop,
+	    },
+    },
+    {
+	.op_type = TEST_OP_EXCLUDE,
+	.op_str  = "exclude",
+	.op_cb =
+	    {
+		daos_test_cb_exclude,
+		test_cb_noop,
+		test_cb_noop,
+	    },
+    },
+    {
+	.op_type = TEST_OP_POOL_QUERY,
+	.op_str  = "pool_query",
+	.op_cb =
+	    {
+		daos_test_cb_query,
+		test_cb_noop,
+		test_cb_noop,
+	    },
+    },
+    {
+	.op_type = TEST_OP_SNAPSHOT_CREATE,
+	.op_str  = "create_snap",
+	.op_cb =
+	    {
+		daos_test_cb_snap,
+		test_cb_noop,
+		test_cb_noop,
+	    },
+    },
+    {
+	.op_str = NULL,
+    },
 };
 
 static void
@@ -1127,6 +1158,78 @@ out:
 
 }
 
+static int cmd_parse_snapshot(test_arg_t *arg, int argc, char *argv[],
+			  struct test_op_record **op)
+{
+	struct test_op_record *op_rec;
+	struct test_punch_arg *pu_arg;
+	char *                 dkey  = NULL;
+	char *                 akey  = NULL;
+	daos_recx_t *          recxs = NULL;
+	unsigned int           recxs_num;
+	daos_epoch_t           epoch = 1;
+	int                    opt;
+	int                    rc = 0;
+
+	static struct epoch_io_cmd_option options[] = {{"--dkey", true, 'd'},
+						       {"--akey", true, 'a'},
+						       {"--epoch", true, 'e'},
+						       {"--recx", true, 'r'},
+						       {0}};
+
+	D_ALLOC_PTR(op_rec);
+	if (op_rec == NULL)
+		return -DER_NOMEM;
+	D_INIT_LIST_HEAD(&op_rec->or_queue_link);
+	pu_arg        = &op_rec->pu_arg;
+	op_rec->or_op = TEST_OP_SNAPSHOT_CREATE;
+	eio_optind    = 1;
+	while ((opt = epoch_io_getopt(argc, argv, options)) != -1) {
+		switch (opt) {
+		case 'e':
+			epoch = atoi(eio_optarg);
+			break;
+		case 'd':
+			D_STRNDUP(dkey, eio_optarg, strlen(eio_optarg));
+			break;
+		case 'a':
+			D_STRNDUP(akey, eio_optarg, strlen(eio_optarg));
+			break;
+		case 'r':
+			rc = recx_parse(eio_optarg, &recxs, NULL, &recxs_num);
+			if (rc) {
+				print_message("parse recxs %s failed, rc %d.\n",
+					      eio_optarg, rc);
+				D_GOTO(out, rc);
+			}
+			pu_arg->pa_recxs     = recxs;
+			pu_arg->pa_recxs_num = recxs_num;
+			break;
+		default:
+			print_message("Unknown Option %c\n", opt);
+			D_GOTO(out, rc = -DER_INVAL);
+		}
+	}
+
+	op_rec->or_epoch = epoch;
+
+	rc = test_op_record_bind(arg, dkey, akey, op_rec);
+	if (rc == 0)
+		*op = op_rec;
+	else
+		print_message("test_op_record_bind(dkey %s akey %s failed.\n",
+			      dkey, akey);
+
+out:
+	if (dkey)
+		D_FREE(dkey);
+	if (akey)
+		D_FREE(akey);
+	if (rc && op_rec)
+		test_op_rec_free(op_rec);
+	return rc;
+}
+
 static int
 cmd_line_parse(test_arg_t *arg, char *cmd_line, struct test_op_record **op)
 {
@@ -1192,6 +1295,8 @@ cmd_line_parse(test_arg_t *arg, char *cmd_line, struct test_op_record **op)
 		rc = cmd_parse_pool(arg, argc, argv, &op_rec);
 	} else if (strcmp(argv[0], "punch") == 0) {
 		rc = cmd_parse_punch(arg, argc, argv, &op_rec);
+	} else if (strcmp(argv[0], "create_snap") == 0) {
+		rc = cmd_parse_snapshot(arg, argc, argv, &op_rec);
 	} else {
 		print_message("unknown cmd %s.\n", argv[0]);
 		rc = -DER_INVAL;
@@ -1302,6 +1407,7 @@ cmd_line_run(test_arg_t *arg, struct test_op_record *op_rec)
 	D_ASSERT(lvl == TEST_LVL_DAOS || lvl == TEST_LVL_VOS);
 
 	/* for modification OP, just go through DAOS stack and return */
+	print_message("Operation = %d\n", op);
 	if (test_op_is_modify(op))
 		return op_dict[op].op_cb[lvl](arg, op_rec, NULL, 0);
 
@@ -1385,9 +1491,11 @@ io_conf_run(test_arg_t *arg, const char *io_conf)
 
 	do {
 		memset(cmd_line, 0, CMD_LINE_LEN_MAX);
+
 		if (cmd_line_get(fp, cmd_line) != 0)
 			break;
 
+		print_message("---cmd_line--- %s\n", cmd_line);
 		rc = cmd_line_parse(arg, cmd_line, &op);
 		if (rc != 0) {
 			print_message("bad cmd_line %s, exit.\n", cmd_line);

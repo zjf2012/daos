@@ -140,7 +140,7 @@ class BasicSnapshot(Test):
         """
         epoch_list = []
         obj_list = []
-        no_of_data = 1000
+        no_of_data = 10
 
         print("Wrote an object and created a snapshot")
         for i in range(no_of_data):
