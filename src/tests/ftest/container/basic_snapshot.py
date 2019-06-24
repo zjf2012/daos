@@ -138,58 +138,36 @@ class BasicSnapshot(Test):
 
         :avocado: tags=snapshot,basicsnap
         """
+        epoch_list = []
+        obj_list = []
+        no_of_data = 1000
 
-        try:
+        print("Wrote an object and created a snapshot")
+        for i in range(no_of_data):
+            print (i)
             # create an object and write some data into it
             obj_cls = self.params.get("obj_class", '/run/object_class/*')
-            thedata = "Now is the winter of our discontent made glorious"
+            thedata = "Now is the winter {}".format(i)
             datasize = len(thedata) + 1
-            dkey = "dkey"
-            akey = "akey"
+            dkey = "dkey {}".format(i)
+            akey = "akey {}".format(i)
             obj, epoch = self.container.write_an_obj(thedata,
                                                      datasize,
                                                      dkey,
                                                      akey,
                                                      obj_cls=obj_cls)
-            obj.close()
+
             # Take a snapshot of the container
             self.snapshot = DaosSnapshot(self.context)
             self.snapshot.create(self.container.coh, epoch)
-            print("Wrote an object and created a snapshot")
-        except DaosApiError as error:
-            self.fail("Test failed during the initial object write.\n{0}"
-                      .format(error))
-
-        # Make 500 changes to the data object. The write_an_obj function does a
-        # commit when the update is complete
-        try:
-            rand_str = lambda n: ''.join([random.choice(string.lowercase) for i
-                                          in xrange(n)])
-            print("Committing 500 additional transactions to the same KV")
-            more_transactions = 500
-            while more_transactions:
-                size = random.randint(1, 250) + 1
-                new_data = rand_str(size)
-                new_obj, _ = self.container.write_an_obj(new_data,
-                                                         size,
-                                                         dkey,
-                                                         akey,
-                                                         obj_cls=obj_cls)
-                new_obj.close()
-                more_transactions -= 1
-        except Exception as error:
-            self.fail("Test failed during the write of 500 objects.\n{0}"
-                      .format(error))
+            epoch_list.append(epoch)
+            obj_list.append(obj)
 
         # List the snapshot and make sure it reflects the original epoch
         try:
-            reported_epoch = self.snapshot.list(self.container.coh)
-            if self.snapshot.epoch != reported_epoch:
-                raise Exception("The snapshot epoch returned from snapshot "
-                                "list is not the same as the original epoch "
-                                "snapshotted.")
-            print("After 500 additional commits the snapshot is still "
-                  "available")
+            print("List all Snapshots=======================================\n")
+            num, reported_epoch = self.snapshot.list(self.container.coh, self.snapshot.epoch)
+            print (num, reported_epoch)
         except Exception as error:
             self.fail("Test was unable to list the snapshot\n{0}"
                       .format(error))
@@ -197,15 +175,14 @@ class BasicSnapshot(Test):
         # Make sure the data in the snapshot is the original data.
         # Get a handle for the snapshot and read the object at dkey, akey.
         # Compare it to the originally written data.
+        print("Read Data from Snapshots===================================\n")
         try:
-            obj.open()
-            snap_handle = self.snapshot.open(self.container.coh)
-            thedata2 = self.container.read_an_obj(datasize, dkey, akey, obj,
-                                                  snap_handle.value)
-            if thedata2.value != thedata:
-                raise Exception("The data in the snapshot is not the same as "
-                                "the original data")
-            print("The snapshot data matches the data originally written.")
+            for i in range(no_of_data):
+                dkey = "dkey {}".format(i)
+                akey = "akey {}".format(i)
+                thedata2 = self.container.read_an_obj(datasize, dkey, akey, obj_list[i],
+                                                      epoch_list[i])
+                print ("{} {} {}".format(dkey, akey, thedata2.value))
         except Exception as error:
             self.fail("Error when retrieving the snapshot data.\n{0}"
                       .format(error))

@@ -1876,7 +1876,7 @@ class DaosSnapshot(object):
     #  snapshots and the epochs and names lists. See description of
     #  daos_cont_list_snap in src/include/daos_api.h. This must be done for
     #  DAOS-1336 Verify container snapshot info.
-    def list(self, coh):
+    def list(self, coh, epoch_val=None):
         """ Call daos_cont_snap_list and make sure there is a snapshot in the
         list.
         coh --ctype.u_long handle on an open container
@@ -1884,23 +1884,29 @@ class DaosSnapshot(object):
         """
         func = self.context.get_function('list-snap')
         num = ctypes.c_uint64(1)
-        epoch = ctypes.c_uint64(self.epoch)
+        if epoch_val is None:
+            epoch = ctypes.c_uint64(self.epoch)
+        else:
+            epoch = ctypes.c_uint64(int(epoch_val))
         anchor = Anchor()
-        retcode = func(coh, ctypes.byref(num), ctypes.byref(epoch), None,
+        retcode = func(coh, ctypes.byref(num), None, None,
                        ctypes.byref(anchor), None)
         if retcode != 0:
             raise DaosApiError("Snapshot create returned non-zero. RC: {0}"
                                .format(retcode))
-        return epoch.value
+        return num.value, epoch.value
 
-    def open(self, coh):
+    def open(self, coh, epoch_val=None):
         """ Get a tx handle for the snapshot and return it.
         coh --ctype.u_long handle on an open container
         returns a handle on the snapshot represented by this DaosSnapshot
         object.
         """
         func = self.context.get_function('open-snap')
-        epoch = ctypes.c_uint64(self.epoch)
+        if epoch_val is None:
+            epoch = ctypes.c_uint64(self.epoch)
+        else:
+            epoch = ctypes.c_uint64(int(epoch_val))
         txhndl = ctypes.c_uint64(0)
         retcode = func(coh, epoch, ctypes.byref(txhndl), None)
         if retcode != 0:
