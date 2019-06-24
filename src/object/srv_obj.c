@@ -673,6 +673,54 @@ obj_update_prefw(crt_rpc_t *req, void *arg)
 	return 0;
 }
 
+static bool
+ec_is_one_cell(daos_iod_t *iod, struct daos_oclass_attr *oca, unsigned int cell)
+{
+	unsigned int    len = oca->u.ec.e_len;
+	unsigned int    k = oca->u.ec.e_k;
+	unsigned int    p = oca->u.ec.e_p;
+	bool		rc = false;
+	unsigned int	i;
+
+	for (i = 0; i < iod->iod_nr; i++) {
+		daos_recx_t     *this_recx = &iod->iod_recxs[i];
+		uint64_t         recx_start_offset = this_recx->rx_idx *
+						     iod->iod_size;
+		uint64_t         recx_end_offset =
+					(this_recx->rx_nr * iod->iod_size) +
+					recx_start_offset;
+
+		if (recx_start_offset/len == recx_end_offset/len && 
+			(recx_start_offset % (len * k)) / len == cell + p) {
+			rc = true;
+		} else {
+			rc = false;
+			break;
+		}
+	}
+
+	return rc;
+}
+static int
+ec_data_target(unsigned int cell, unsigned int nr, daos_iod_t *iods,
+	       struct daos_oclass_attr *oca, long **skip_list)
+{
+	unsigned int	 i, j;
+	int		 rc = 0;
+
+	for (i = 0; i < nr; i++) {
+		daos_iod_t	*iod = &iods[i];
+
+		if (ec_is_one_cell(iod, oca, cell))
+			continue;
+		for (j = 0; j <= iod->iod_nr; j++) {
+			D_INFO("recx: %u, start: %lu, length: %lu\n", j,
+				iod->iod_recxs[j].rx_idx * iod->iod_size,
+				iod->iod_recxs[j].rx_nr * iod->iod_size);
+		}
+	}
+	return rc;
+}
 static int
 ds_obj_rw_local_hdlr(crt_rpc_t *rpc, uint32_t tag, struct ds_cont_hdl *cont_hdl,
 		     struct ds_cont_child *cont, daos_handle_t *ioh,
@@ -681,6 +729,9 @@ ds_obj_rw_local_hdlr(crt_rpc_t *rpc, uint32_t tag, struct ds_cont_hdl *cont_hdl,
 	struct obj_rw_in	*orw = crt_req_get(rpc);
 	struct obj_rw_out	*orwo = crt_reply_get(rpc);
 	struct bio_desc		*biod;
+	struct daos_oclass_attr *oca =
+				 daos_oclass_attr_find(orw->orw_oid.id_pub);
+	long			*skip_list[orw->orw_nr];
 	crt_bulk_op_t		 bulk_op;
 	bool			 rma;
 	bool			 bulk_bind;
@@ -702,6 +753,22 @@ ds_obj_rw_local_hdlr(crt_rpc_t *rpc, uint32_t tag, struct ds_cont_hdl *cont_hdl,
 	/* Prepare IO descriptor */
 	if (update) {
 		bulk_op = CRT_BULK_GET;
+		D_INFO("Object resilience: %d\n", oca->ca_resil);
+		if (oca->ca_resil == DAOS_RES_EC) {
+			int i;
+
+			for (i = 0; i < orw->orw_nr; i++)
+				skip_list[i] = NULL;
+			unsigned int	 cell = orw->orw_oid.id_shard -
+						orw->orw_start_shard;
+
+			D_INFO("Processing cell: %u\n", cell);
+			if (cell >= oca->u.ec.e_p)
+				rc = ec_data_target(cell, orw->orw_nr,
+						    orw->orw_iods.ca_arrays,
+						    oca, skip_list);
+	/* pass object class attrubutes, orw_nr and iods to ec handler */
+		}
 		rc = vos_update_begin(cont->sc_hdl, orw->orw_oid,
 				      orw->orw_epoch, &orw->orw_dkey,
 				      orw->orw_nr, orw->orw_iods.ca_arrays,

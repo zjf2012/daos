@@ -257,4 +257,6 @@ int obj_encode_full_stripe(daos_obj_id_t oid, d_sg_list_t *sgl,
 int
 ec_obj_update_encode(tse_task_t *task, daos_obj_id_t oid,
 		     daos_oclass_attr_t *oca, uint64_t *tgt_set);
+bool
+ec_mult_data_targets(uint32_t fw_cnt, daos_obj_id_t oid);
 #endif /* __DAOS_OBJ_INTENRAL_H__ */

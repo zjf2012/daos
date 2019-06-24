@@ -443,7 +443,8 @@ obj_shard_rw(struct dc_obj_shard *shard, enum obj_rpc_opc opc,
 		(char *)dkey->iov_buf, tgt_ep.ep_rank,
 		tgt_ep.ep_tag, epoch, data_size, DP_DTI(&orw->orw_dti));
 
-	do_bulk = data_size >= OBJ_BULK_LIMIT;
+	do_bulk = data_size >= OBJ_BULK_LIMIT ||
+			ec_mult_data_targets(fw_cnt, orw->orw_oid.id_pub);
 	if (do_bulk) {
 		bool forward = fw_shard_tgts != NULL;
 
