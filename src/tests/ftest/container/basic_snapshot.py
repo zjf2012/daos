@@ -138,7 +138,7 @@ class BasicSnapshot(Test):
 
         :avocado: tags=snapshot,basicsnap
         """
-        epoch_list = []
+        tx_list = []
         obj_list = []
         no_of_data = 10
 
@@ -151,16 +151,16 @@ class BasicSnapshot(Test):
             datasize = len(thedata) + 1
             dkey = "dkey {}".format(i)
             akey = "akey {}".format(i)
-            obj, epoch = self.container.write_an_obj(thedata,
-                                                     datasize,
-                                                     dkey,
-                                                     akey,
-                                                     obj_cls=obj_cls)
+            obj, tx = self.container.write_an_obj(thedata,
+                                                  datasize,
+                                                  dkey,
+                                                  akey,
+                                                  obj_cls=obj_cls)
 
             # Take a snapshot of the container
             self.snapshot = DaosSnapshot(self.context)
-            self.snapshot.create(self.container.coh, epoch)
-            epoch_list.append(epoch)
+            self.snapshot.create(self.container.coh, tx)
+            tx_list.append(tx)
             obj_list.append(obj)
 
         # List the snapshot and make sure it reflects the original epoch
@@ -181,7 +181,7 @@ class BasicSnapshot(Test):
                 dkey = "dkey {}".format(i)
                 akey = "akey {}".format(i)
                 thedata2 = self.container.read_an_obj(datasize, dkey, akey, obj_list[i],
-                                                      epoch_list[i])
+                                                      tx_list[i])
                 print ("{} {} {}".format(dkey, akey, thedata2.value))
         except Exception as error:
             self.fail("Error when retrieving the snapshot data.\n{0}"

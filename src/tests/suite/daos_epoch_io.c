@@ -23,7 +23,7 @@
 /**
  * This file is part of daos, to test epoch IO.
  */
-#define D_LOGFAC	DD_FAC(tests)
+#define D_LOGFAC DD_FAC(tests)
 
 #include "daos_iotest.h"
 
@@ -37,25 +37,22 @@ static char *test_io_fail_dir;
 /* the IO conf file */
 const char *test_io_conf;
 
-#define CMD_LINE_LEN_MAX	(1024)
-#define CMD_LINE_ARGC_MAX	(16)
-#define CMD_LINE_DBG		0
+#define CMD_LINE_LEN_MAX (1024)
+#define CMD_LINE_ARGC_MAX (16)
+#define CMD_LINE_DBG 0
 
 /*
  * To add predefined io_conf:
  * and add file name to predefined_io_confs array before the NULL.
  */
-static char *predefined_io_confs[] = {
-	"./io_conf/daos_io_conf_1",
-	"./io_conf/daos_io_conf_2",
-	NULL
-};
+static char *predefined_io_confs[] = {"./io_conf/daos_io_conf_1",
+				      "./io_conf/daos_io_conf_2", NULL};
 
-static daos_size_t
-test_recx_size(daos_recx_t *recxs, int recx_num, daos_size_t iod_size)
+static daos_size_t test_recx_size(daos_recx_t *recxs, int recx_num,
+				  daos_size_t iod_size)
 {
-	daos_size_t	size = 0;
-	int		i;
+	daos_size_t size = 0;
+	int         i;
 
 	if (recxs == NULL)
 		return iod_size;
@@ -67,10 +64,9 @@ test_recx_size(daos_recx_t *recxs, int recx_num, daos_size_t iod_size)
 	return size;
 }
 
-static int
-epoch_io_mkdir(char *path)
+static int epoch_io_mkdir(char *path)
 {
-	int	rc;
+	int rc;
 
 	rc = test_mkdir(path, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (rc)
@@ -79,9 +75,8 @@ epoch_io_mkdir(char *path)
 	return rc;
 }
 
-static void
-test_buf_init(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
-	      int *values, int num, daos_size_t iod_size)
+static void test_buf_init(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
+			  int *values, int num, daos_size_t iod_size)
 {
 	int i;
 
@@ -98,29 +93,28 @@ test_buf_init(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
 	}
 }
 
-static int
-test_buf_verify(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
-		int *values, int num, daos_size_t iod_size)
+static int test_buf_verify(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
+			   int *values, int num, daos_size_t iod_size)
 {
 	int i;
 
 	if (recxs == NULL) {
 		for (i = 0; i < buf_size; i++) {
-				print_message("i %d got %d expect %d\n",
-					      i, (int)buf[i], (int)*values);
+			print_message("i %d got %d expect %d\n", i, (int)buf[i],
+				      (int)*values);
 		}
 		return 0;
 	}
 
 	for (i = 0; i < num; i++) {
 		daos_size_t size = recxs[i].rx_nr * iod_size;
-		int j;
+		int         j;
 
 		for (j = 0; j < size; j++) {
-				print_message("i %d j %d got %d"
-					      " expect %d\n", i, j,
-					       (int)buf[j], values[i]);
-			}
+			print_message("i %d j %d got %d"
+				      " expect %d\n",
+				      i, j, (int)buf[j], values[i]);
+		}
 
 		buf += size;
 	}
@@ -128,20 +122,19 @@ test_buf_verify(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
 	return 0;
 }
 
-static int
-daos_test_cb_punch(test_arg_t *arg, struct test_op_record *op, char **rbuf,
-		   daos_size_t *rbuf_size)
+static int daos_test_cb_punch(test_arg_t *arg, struct test_op_record *op,
+			      char **rbuf, daos_size_t *rbuf_size)
 {
-	struct epoch_io_args		*eio_arg = &arg->eio_args;
-	struct test_key_record		*key_rec = op->or_key_rec;
-	struct ioreq			 req;
-	struct test_punch_arg		*pu_arg = &op->pu_arg;
+	struct epoch_io_args *  eio_arg = &arg->eio_args;
+	struct test_key_record *key_rec = op->or_key_rec;
+	struct ioreq            req;
+	struct test_punch_arg * pu_arg = &op->pu_arg;
 
 	ioreq_init(&req, arg->coh, eio_arg->op_oid, DAOS_IOD_ARRAY, arg);
 
 	if (pu_arg->pa_recxs_num == 0)
-		punch_akey(key_rec->or_dkey, key_rec->or_akey,
-			   DAOS_TX_NONE, &req);
+		punch_akey(key_rec->or_dkey, key_rec->or_akey, DAOS_TX_NONE,
+			   &req);
 	else
 		punch_recxs(key_rec->or_dkey, key_rec->or_akey,
 			    pu_arg->pa_recxs, pu_arg->pa_recxs_num,
@@ -154,30 +147,36 @@ daos_test_cb_punch(test_arg_t *arg, struct test_op_record *op, char **rbuf,
 static int daos_test_cb_snap(test_arg_t *arg, struct test_op_record *op,
 			     char **rbuf, daos_size_t *rbuf_size)
 {
-	print_message("========SAMIR========Create the Snapshot\n");
-	daos_epoch_t snap;
+	//daos_epoch_t snap;
 	int          rc = 0;
+	daos_epoch_t  snap_epoch;
+	daos_anchor_t anchor;
+	int           snap_count_out;
 
-	rc = daos_cont_create_snap(arg->coh, &snap, NULL, NULL);
+	rc = daos_cont_create_snap(arg->coh, &snap_epoch, NULL, NULL);
+	op->or_epoch = snap_epoch;
+    daos_cont_list_snap(arg->coh, &snap_count_out, NULL, NULL, &anchor, NULL);
+	print_message("Number of Snapshot=%d %"PRIu64"\n", snap_count_out, snap_epoch);
+
 	return rc;
 }
 
-static int
-daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op, char **rbuf,
-		daos_size_t *rbuf_size)
+static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
+			   char **rbuf, daos_size_t *rbuf_size)
 {
-	struct epoch_io_args		*eio_arg = &arg->eio_args;
-	struct test_key_record		*key_rec = op->or_key_rec;
-	struct test_update_fetch_arg	*uf_arg = &op->uf_arg;
-	const char			*dkey = key_rec->or_dkey;
-	const char			*akey = key_rec->or_akey;
-	daos_size_t			 iod_size = key_rec->or_iod_size;
-	bool				 array = uf_arg->ua_array;
-	daos_iod_type_t			 iod_type;
-	daos_size_t			 buf_size;
-	char				*buf = NULL;
-	struct ioreq			 req;
-	int				 rc = 0;
+	struct epoch_io_args *        eio_arg  = &arg->eio_args;
+	struct test_key_record *      key_rec  = op->or_key_rec;
+	struct test_update_fetch_arg *uf_arg   = &op->uf_arg;
+	const char *                  dkey     = key_rec->or_dkey;
+	const char *                  akey     = key_rec->or_akey;
+	daos_size_t                   iod_size = key_rec->or_iod_size;
+	bool                          array    = uf_arg->ua_array;
+	daos_iod_type_t               iod_type;
+	daos_size_t                   buf_size;
+	char *                        buf = NULL;
+	struct ioreq                  req;
+	daos_handle_t				  th_open;
+	int                           rc = 0;
 
 	if (array)
 		D_ASSERT(uf_arg->ua_recxs != NULL && uf_arg->ua_recx_num >= 1);
@@ -186,8 +185,8 @@ daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op, char **rbuf,
 
 	iod_type = array ? DAOS_IOD_ARRAY : DAOS_IOD_SINGLE;
 	ioreq_init(&req, arg->coh, eio_arg->op_oid, iod_type, arg);
-	buf_size = test_recx_size(uf_arg->ua_recxs, uf_arg->ua_recx_num,
-				  iod_size);
+	buf_size =
+	    test_recx_size(uf_arg->ua_recxs, uf_arg->ua_recx_num, iod_size);
 	D_ALLOC(buf, buf_size);
 	if (buf == NULL)
 		D_GOTO(out, rc = -DER_NOMEM);
@@ -208,19 +207,28 @@ daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op, char **rbuf,
 				     uf_arg->ua_recxs, uf_arg->ua_recx_num, buf,
 				     buf_size, &req);
 	} else {
-		if (op->or_op == TEST_OP_UPDATE)
-			insert_single(dkey, akey, 0, buf, buf_size,
-				      DAOS_TX_NONE, &req);
-		else
-			lookup_single(dkey, akey, 0, buf, buf_size,
-				      DAOS_TX_NONE, &req);
+		if (op->or_op == TEST_OP_UPDATE) {
+			printf("--------------------- insert epoch dkey=%s \n",dkey);
+			insert_single(dkey, akey, 0, buf, buf_size, DAOS_TX_NONE, &req);
+		} else {
+			printf("--------------------- In lookup epoch before daos_tx_open_snap = %" PRIu64 "\n",
+			       op->or_epoch);
+			rc = daos_tx_open_snap(arg->coh, op->or_epoch, &th_open,
+					  NULL);
+			print_message("%d", rc);
+
+			printf("--------------------- In lookup epoch after daos_tx_open_snap = %" PRIu64 "\n",
+			       op->or_epoch);
+			lookup_single(dkey, akey, 0, buf, buf_size, th_open,
+				      &req);
+		}
 	}
 
 	if (uf_arg->ua_verify)
-		rc = test_buf_verify(buf, buf_size, uf_arg->ua_recxs,
-				  uf_arg->ua_values ?: &uf_arg->ua_single_value,
-				  uf_arg->ua_values ? uf_arg->ua_recx_num : 1,
-				  iod_size);
+		rc = test_buf_verify(
+		    buf, buf_size, uf_arg->ua_recxs,
+		    uf_arg->ua_values ?: &uf_arg->ua_single_value,
+		    uf_arg->ua_values ? uf_arg->ua_recx_num : 1, iod_size);
 out:
 	ioreq_fini(&req);
 	if (op->or_op == TEST_OP_UPDATE) {
@@ -228,52 +236,49 @@ out:
 			D_FREE(buf);
 	} else {
 		if (rc == 0) {
-			*rbuf = buf;
+			*rbuf      = buf;
 			*rbuf_size = buf_size;
 		}
 	}
 	return rc;
 }
 
-static int
-vos_test_cb_update(test_arg_t *arg, struct test_op_record *op,
-		   char **rbuf, daos_size_t *rbuf_size)
+static int vos_test_cb_update(test_arg_t *arg, struct test_op_record *op,
+			      char **rbuf, daos_size_t *rbuf_size)
 {
 	return -DER_NOSYS;
 }
 
-static int
-fio_test_cb_uf(test_arg_t *arg, struct test_op_record *op, char **rbuf,
-	       daos_size_t *rbuf_size)
+static int fio_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
+			  char **rbuf, daos_size_t *rbuf_size)
 {
-	struct test_key_record		*key_rec = op->or_key_rec;
-	const char			*dkey = key_rec->or_dkey;
-	const char			*akey = key_rec->or_akey;
-	struct test_update_fetch_arg	*uf_arg = &op->uf_arg;
-	daos_size_t			 iod_size = key_rec->or_iod_size;
-	bool				 array = uf_arg->ua_array;
-	daos_size_t			 buf_size;
-	char				*buf = NULL, *data;
-	int				 fd;
-	off_t				 off;
-	size_t				 len, data_len, total_len;
-	int				 i;
-	int				 rc = 0;
+	struct test_key_record *      key_rec  = op->or_key_rec;
+	const char *                  dkey     = key_rec->or_dkey;
+	const char *                  akey     = key_rec->or_akey;
+	struct test_update_fetch_arg *uf_arg   = &op->uf_arg;
+	daos_size_t                   iod_size = key_rec->or_iod_size;
+	bool                          array    = uf_arg->ua_array;
+	daos_size_t                   buf_size;
+	char *                        buf = NULL, *data;
+	int                           fd;
+	off_t                         off;
+	size_t                        len, data_len, total_len;
+	int                           i;
+	int                           rc = 0;
 
 	if (array)
 		D_ASSERT(uf_arg->ua_recxs != NULL && uf_arg->ua_recx_num >= 1);
 	else
 		D_ASSERT(uf_arg->ua_recxs == NULL);
 
-	buf_size = test_recx_size(uf_arg->ua_recxs, uf_arg->ua_recx_num,
-				  iod_size);
+	buf_size =
+	    test_recx_size(uf_arg->ua_recxs, uf_arg->ua_recx_num, iod_size);
 	D_ALLOC(buf, buf_size);
 	if (buf == NULL)
 		D_GOTO(out, rc = -DER_NOMEM);
 	if (op->or_op == TEST_OP_UPDATE)
 		test_buf_init(buf, buf_size, uf_arg->ua_recxs,
-			      uf_arg->ua_values, uf_arg->ua_recx_num,
-			      iod_size);
+			      uf_arg->ua_values, uf_arg->ua_recx_num, iod_size);
 	fd = array ? key_rec->or_fd_array : key_rec->or_fd_single;
 	D_ASSERT(fd != 0);
 
@@ -289,8 +294,8 @@ fio_test_cb_uf(test_arg_t *arg, struct test_op_record *op, char **rbuf,
 				data_len = pread(fd, data, len, off);
 			if (data_len != len) {
 				print_message("fio %s/%s failed, len %zu "
-					      "got %zu.\n", dkey, akey,
-					      len, data_len);
+					      "got %zu.\n",
+					      dkey, akey, len, data_len);
 				D_GOTO(out, rc = -DER_IO);
 			}
 			data += len;
@@ -303,11 +308,12 @@ fio_test_cb_uf(test_arg_t *arg, struct test_op_record *op, char **rbuf,
 			total_len = pread(fd, buf, buf_size, 0);
 	}
 	if (total_len != buf_size) {
-		print_message("fio %s/%s failed, buf_size "DF_U64", total_len "
-			      "%zu.\n", dkey, akey, buf_size, total_len);
+		print_message("fio %s/%s failed, buf_size " DF_U64
+			      ", total_len "
+			      "%zu.\n",
+			      dkey, akey, buf_size, total_len);
 		rc = -DER_IO;
 	}
-
 
 out:
 	if (op->or_op == TEST_OP_UPDATE) {
@@ -315,16 +321,15 @@ out:
 			D_FREE(buf);
 	} else {
 		if (rc == 0) {
-			*rbuf = buf;
+			*rbuf      = buf;
 			*rbuf_size = buf_size;
 		}
 	}
 	return rc;
 }
 
-static int
-daos_test_cb_add(test_arg_t *arg, struct test_op_record *op,
-		 char **rbuf, daos_size_t *rbuf_size)
+static int daos_test_cb_add(test_arg_t *arg, struct test_op_record *op,
+			    char **rbuf, daos_size_t *rbuf_size)
 {
 	print_message("add rank %u\n", op->ae_arg.ua_rank);
 	test_rebuild_wait(&arg, 1);
@@ -333,9 +338,8 @@ daos_test_cb_add(test_arg_t *arg, struct test_op_record *op,
 	return 0;
 }
 
-static int
-daos_test_cb_exclude(test_arg_t *arg, struct test_op_record *op,
-		     char **rbuf, daos_size_t *rbuf_size)
+static int daos_test_cb_exclude(test_arg_t *arg, struct test_op_record *op,
+				char **rbuf, daos_size_t *rbuf_size)
 {
 	print_message("exclude rank %u\n", op->ae_arg.ua_rank);
 	daos_exclude_server(arg->pool.pool_uuid, arg->group, &arg->pool.svc,
@@ -343,12 +347,11 @@ daos_test_cb_exclude(test_arg_t *arg, struct test_op_record *op,
 	return 0;
 }
 
-static int
-daos_test_cb_query(test_arg_t *arg, struct test_op_record *op,
-		   char **rbuf, daos_size_t *rbuf_size)
+static int daos_test_cb_query(test_arg_t *arg, struct test_op_record *op,
+			      char **rbuf, daos_size_t *rbuf_size)
 {
-	daos_pool_info_t pinfo = { 0 };
-	int rc;
+	daos_pool_info_t pinfo = {0};
+	int              rc;
 
 	rc = daos_pool_query(arg->pool.poh, NULL, &pinfo, NULL, NULL);
 	if (rc != 0)
@@ -357,16 +360,14 @@ daos_test_cb_query(test_arg_t *arg, struct test_op_record *op,
 	return rc;
 }
 
-static int
-vos_test_cb_fetch(test_arg_t *arg, struct test_op_record *op,
-		  char **rbuf, daos_size_t *rbuf_size)
+static int vos_test_cb_fetch(test_arg_t *arg, struct test_op_record *op,
+			     char **rbuf, daos_size_t *rbuf_size)
 {
 	return -DER_NOSYS;
 }
 
-static int
-test_cb_noop(test_arg_t *arg, struct test_op_record *op,
-	     char **rbuf, daos_size_t *rbuf_size)
+static int test_cb_noop(test_arg_t *arg, struct test_op_record *op, char **rbuf,
+			daos_size_t *rbuf_size)
 {
 	return -DER_NOSYS;
 }
@@ -467,32 +468,30 @@ struct test_op_dict op_dict[] = {
     },
 };
 
-static void
-squeeze_spaces(char *line)
+static void squeeze_spaces(char *line)
 {
-	char	*current = line;
-	int	 spacing = 0;
-	int	 leading_space = 1;
+	char *current       = line;
+	int   spacing       = 0;
+	int   leading_space = 1;
 
 	for (; line && *line != '\n'; line++) {
 		if (isspace(*line)) {
 			if (!spacing && !leading_space) {
 				*current++ = *line;
-				spacing = 1;
+				spacing    = 1;
 			}
 		} else {
-			*current++ = *line;
-			spacing = 0;
+			*current++    = *line;
+			spacing       = 0;
 			leading_space = 0;
 		}
 	}
 	*current = '\0';
 }
 
-static int
-cmd_line_get(FILE *fp, char *line)
+static int cmd_line_get(FILE *fp, char *line)
 {
-	char	*p;
+	char *p;
 
 	D_ASSERT(line != NULL && fp != NULL);
 	do {
@@ -510,23 +509,22 @@ cmd_line_get(FILE *fp, char *line)
 }
 
 struct epoch_io_cmd_option {
-	char	*opt_name;
-	bool	 with_arg;
-	char	 opt;
+	char *opt_name;
+	bool  with_arg;
+	char  opt;
 };
 
 /* getopt_long with bug when calling it multiple times, so write this simple
  * helper function for parameter parsing, with similar behavior as getopt_long.
  */
-static int	 eio_optind = 1;
-static char	*eio_optarg;
+static int   eio_optind = 1;
+static char *eio_optarg;
 
-int
-epoch_io_getopt(int argc, char **argv, struct epoch_io_cmd_option options[])
+int epoch_io_getopt(int argc, char **argv, struct epoch_io_cmd_option options[])
 {
-	int	idx = eio_optind;
-	char	*p;
-	int	i;
+	int   idx = eio_optind;
+	char *p;
+	int   i;
 
 	if (idx >= argc)
 		return -1;
@@ -551,17 +549,16 @@ epoch_io_getopt(int argc, char **argv, struct epoch_io_cmd_option options[])
 	return '?';
 }
 
-static int
-recx_parse(char *recx_str, daos_recx_t **recxs, int **values,
-	   unsigned int *recx_num)
+static int recx_parse(char *recx_str, daos_recx_t **recxs, int **values,
+		      unsigned int *recx_num)
 {
-	daos_recx_t	*recx_allocated = NULL;
-	int		*value_allocated = NULL;
-	char		 str[CMD_LINE_LEN_MAX + 1] = { 0 };
-	char		*p = str, *tmp;
-	bool		 brace_unmatch = false;
-	uint64_t	 rx_end;
-	unsigned int	 idx = 0;
+	daos_recx_t *recx_allocated            = NULL;
+	int *        value_allocated           = NULL;
+	char         str[CMD_LINE_LEN_MAX + 1] = {0};
+	char *       p                         = str, *tmp;
+	bool         brace_unmatch             = false;
+	uint64_t     rx_end;
+	unsigned int idx = 0;
 
 	D_ALLOC_ARRAY(recx_allocated, IOREQ_IOD_NR);
 	if (recx_allocated == NULL)
@@ -590,7 +587,7 @@ recx_parse(char *recx_str, daos_recx_t **recxs, int **values,
 		*tmp = '\0';
 		tmp++;
 		recx_allocated[idx].rx_idx = atol(p);
-		p = tmp;
+		p                          = tmp;
 		while (*p == ' ')
 			p++;
 		tmp = strchr(p, ']');
@@ -598,16 +595,17 @@ recx_parse(char *recx_str, daos_recx_t **recxs, int **values,
 			print_message("no matching ] for %s.\n", p);
 			break;
 		}
-		*tmp = '\0';
+		*tmp   = '\0';
 		rx_end = atol(p);
 		if (rx_end <= recx_allocated[idx].rx_idx) {
-			print_message("rx_end "DF_U64" <= rx_idx "DF_U64"\n",
+			print_message("rx_end " DF_U64 " <= rx_idx " DF_U64
+				      "\n",
 				      rx_end, recx_allocated[idx].rx_idx);
 			break;
 		}
-		brace_unmatch = false;
+		brace_unmatch             = false;
 		recx_allocated[idx].rx_nr = rx_end - recx_allocated[idx].rx_idx;
-		p = tmp + 1;
+		p                         = tmp + 1;
 		if (isdigit(*p)) {
 			if (value_allocated)
 				value_allocated[idx] = atol(p);
@@ -616,7 +614,6 @@ recx_parse(char *recx_str, daos_recx_t **recxs, int **values,
 		}
 		idx++;
 	}
-
 
 	if (idx == 0 || brace_unmatch) {
 		print_message("bad recx_str %s\n", p);
@@ -634,11 +631,11 @@ recx_parse(char *recx_str, daos_recx_t **recxs, int **values,
 	return 0;
 }
 
-static struct test_key_record *
-test_key_rec_lookup(test_arg_t *arg, char *dkey, char *akey)
+static struct test_key_record *test_key_rec_lookup(test_arg_t *arg, char *dkey,
+						   char *akey)
 {
-	struct epoch_io_args	*eio_arg = &arg->eio_args;
-	struct test_key_record	*key_rec;
+	struct epoch_io_args *  eio_arg = &arg->eio_args;
+	struct test_key_record *key_rec;
 
 	if (dkey == NULL)
 		dkey = eio_arg->op_dkey;
@@ -647,7 +644,7 @@ test_key_rec_lookup(test_arg_t *arg, char *dkey, char *akey)
 	if (dkey == NULL || akey == NULL)
 		return NULL;
 
-	d_list_for_each_entry(key_rec, &eio_arg->op_list, or_list) {
+	d_list_for_each_entry (key_rec, &eio_arg->op_list, or_list) {
 		if (strcmp(key_rec->or_dkey, dkey) == 0 &&
 		    strcmp(key_rec->or_akey, akey) == 0)
 			return key_rec;
@@ -661,18 +658,17 @@ test_key_rec_lookup(test_arg_t *arg, char *dkey, char *akey)
 	D_INIT_LIST_HEAD(&key_rec->or_queue);
 	D_STRNDUP(key_rec->or_dkey, dkey, strlen(dkey));
 	D_STRNDUP(key_rec->or_akey, akey, strlen(akey));
-	key_rec->or_iod_size = eio_arg->op_iod_size;
+	key_rec->or_iod_size       = eio_arg->op_iod_size;
 	key_rec->or_replayed_epoch = 0;
-	key_rec->or_fd_array = 0;
-	key_rec->or_fd_single = 0;
-	key_rec->or_op_num = 0;
+	key_rec->or_fd_array       = 0;
+	key_rec->or_fd_single      = 0;
+	key_rec->or_op_num         = 0;
 	d_list_add_tail(&key_rec->or_list, &eio_arg->op_list);
 
 	return key_rec;
 }
 
-static void
-test_op_rec_free(struct test_op_record *op_rec)
+static void test_op_rec_free(struct test_op_record *op_rec)
 {
 	/* the fetch OP is not in queue */
 	if (!d_list_empty(&op_rec->or_queue_link)) {
@@ -701,13 +697,12 @@ test_op_rec_free(struct test_op_record *op_rec)
 	D_FREE(op_rec);
 }
 
-static void
-test_key_rec_free(struct test_key_record *key_rec)
+static void test_key_rec_free(struct test_key_record *key_rec)
 {
-	struct test_op_record	*op_rec, *op_rec_tmp;
+	struct test_op_record *op_rec, *op_rec_tmp;
 
-	d_list_for_each_entry_safe(op_rec, op_rec_tmp, &key_rec->or_queue,
-				   or_queue_link) {
+	d_list_for_each_entry_safe (op_rec, op_rec_tmp, &key_rec->or_queue,
+				    or_queue_link) {
 		test_op_rec_free(op_rec);
 	}
 	d_list_del_init(&key_rec->or_list);
@@ -726,62 +721,59 @@ test_key_rec_free(struct test_key_record *key_rec)
 	D_FREE(key_rec);
 }
 
-static void
-test_eio_arg_oplist_free(test_arg_t	*arg)
+static void test_eio_arg_oplist_free(test_arg_t *arg)
 {
-	struct epoch_io_args	*eio_arg = &arg->eio_args;
-	struct test_key_record	*key_rec, *key_rec_tmp;
+	struct epoch_io_args *  eio_arg = &arg->eio_args;
+	struct test_key_record *key_rec, *key_rec_tmp;
 
-	d_list_for_each_entry_safe(key_rec, key_rec_tmp, &eio_arg->op_list,
-				   or_list) {
+	d_list_for_each_entry_safe (key_rec, key_rec_tmp, &eio_arg->op_list,
+				    or_list) {
 		test_key_rec_free(key_rec);
 	}
 }
 
-static void
-test_key_rec_add_op(struct test_key_record *key_rec,
-		    struct test_op_record *op_rec)
+static void test_key_rec_add_op(struct test_key_record *key_rec,
+				struct test_op_record * op_rec)
 {
-	struct test_op_record	*rec = NULL;
+	struct test_op_record *rec = NULL;
 
 	op_rec->or_key_rec = key_rec;
 	/* insert modification OP to the queue in epoch order */
 	if (test_op_is_modify(op_rec->or_op)) {
-		d_list_for_each_entry(rec, &key_rec->or_queue, or_queue_link) {
+		d_list_for_each_entry (rec, &key_rec->or_queue, or_queue_link) {
 			if (rec->or_epoch > op_rec->or_epoch)
 				break;
 		}
 		d_list_add_tail(&op_rec->or_queue_link, &rec->or_queue_link);
 		key_rec->or_op_num++;
 #if CMD_LINE_DBG
-		print_message("added op %d, epoch "DF_U64", dkey %s akey %s, "
-			      "to queue, op_num %d.\n", op_rec->or_op,
-			      op_rec->or_epoch, key_rec->or_dkey,
+		print_message("added op %d, epoch " DF_U64 ", dkey %s akey %s, "
+			      "to queue, op_num %d.\n",
+			      op_rec->or_op, op_rec->or_epoch, key_rec->or_dkey,
 			      key_rec->or_akey, key_rec->or_op_num);
 
 #endif
 	}
 }
 
-static int
-test_op_record_bind(test_arg_t *arg, char *dkey, char *akey,
-		    struct test_op_record *op_rec)
+static int test_op_record_bind(test_arg_t *arg, char *dkey, char *akey,
+			       struct test_op_record *op_rec)
 {
-	struct epoch_io_args	*eio_arg = &arg->eio_args;
-	struct test_key_record	*key_rec;
+	struct epoch_io_args *  eio_arg = &arg->eio_args;
+	struct test_key_record *key_rec;
 
 	key_rec = test_key_rec_lookup(arg, dkey, akey);
 	if (key_rec == NULL) {
 		print_message("test_key_rec_lookup (dkey %s akey %s) failed "
-			       "possibly because dkey/akey not set.\n",
-			       dkey, akey);
+			      "possibly because dkey/akey not set.\n",
+			      dkey, akey);
 		return -DER_INVAL;
 	}
 
 	if (key_rec->or_iod_size != eio_arg->op_iod_size) {
 		print_message("cannot set different iod_size for same "
-			       "dkey/akey ("DF_U64", "DF_U64").\n",
-			       key_rec->or_iod_size, eio_arg->op_iod_size);
+			      "dkey/akey (" DF_U64 ", " DF_U64 ").\n",
+			      key_rec->or_iod_size, eio_arg->op_iod_size);
 		return -DER_INVAL;
 	}
 
@@ -789,27 +781,23 @@ test_op_record_bind(test_arg_t *arg, char *dkey, char *akey,
 	return 0;
 }
 
-static int
-cmd_parse_add_exclude(test_arg_t *arg, int argc, char **argv,
-		      unsigned int opc, struct test_op_record **op)
+static int cmd_parse_add_exclude(test_arg_t *arg, int argc, char **argv,
+				 unsigned int opc, struct test_op_record **op)
 {
-	struct test_op_record		*op_rec = NULL;
-	struct test_add_exclude_arg	*ae_arg;
-	int				opt;
-	int				rc = 0;
+	struct test_op_record *      op_rec = NULL;
+	struct test_add_exclude_arg *ae_arg;
+	int                          opt;
+	int                          rc = 0;
 
 	static struct epoch_io_cmd_option options[] = {
-		{"--rank",	true,	'r'},
-		{"--tgt",	true,	't'},
-		{0}
-	};
+	    {"--rank", true, 'r'}, {"--tgt", true, 't'}, {0}};
 
 	D_ALLOC_PTR(op_rec);
 	if (op_rec == NULL)
 		return -DER_NOMEM;
 
 	D_INIT_LIST_HEAD(&op_rec->or_queue_link);
-	ae_arg = &op_rec->ae_arg;
+	ae_arg        = &op_rec->ae_arg;
 	op_rec->or_op = opc;
 
 	eio_optind = 1;
@@ -839,35 +827,32 @@ out:
 	return rc;
 }
 
-static int
-cmd_parse_punch(test_arg_t *arg, int argc, char **argv,
-		struct test_op_record **op)
+static int cmd_parse_punch(test_arg_t *arg, int argc, char **argv,
+			   struct test_op_record **op)
 {
-	struct test_op_record		*op_rec;
-	struct test_punch_arg		*pu_arg;
-	char				*dkey = NULL;
-	char				*akey = NULL;
-	daos_recx_t			*recxs = NULL;
-	unsigned int			recxs_num;
-	daos_epoch_t			epoch = 1;
-	int				opt;
-	int				rc = 0;
+	struct test_op_record *op_rec;
+	struct test_punch_arg *pu_arg;
+	char *                 dkey  = NULL;
+	char *                 akey  = NULL;
+	daos_recx_t *          recxs = NULL;
+	unsigned int           recxs_num;
+	daos_epoch_t           epoch = 1;
+	int                    opt;
+	int                    rc = 0;
 
-	static struct epoch_io_cmd_option options[] = {
-		{"--dkey",	true,	'd'},
-		{"--akey",	true,	'a'},
-		{"--epoch",	true,	'e'},
-		{"--recx",	true,	'r'},
-		{0}
-	};
+	static struct epoch_io_cmd_option options[] = {{"--dkey", true, 'd'},
+						       {"--akey", true, 'a'},
+						       {"--epoch", true, 'e'},
+						       {"--recx", true, 'r'},
+						       {0}};
 
 	D_ALLOC_PTR(op_rec);
 	if (op_rec == NULL)
 		return -DER_NOMEM;
 	D_INIT_LIST_HEAD(&op_rec->or_queue_link);
-	pu_arg = &op_rec->pu_arg;
+	pu_arg        = &op_rec->pu_arg;
 	op_rec->or_op = TEST_OP_PUNCH;
-	eio_optind = 1;
+	eio_optind    = 1;
 	while ((opt = epoch_io_getopt(argc, argv, options)) != -1) {
 		switch (opt) {
 		case 'e':
@@ -886,7 +871,7 @@ cmd_parse_punch(test_arg_t *arg, int argc, char **argv,
 					      eio_optarg, rc);
 				D_GOTO(out, rc);
 			}
-			pu_arg->pa_recxs = recxs;
+			pu_arg->pa_recxs     = recxs;
 			pu_arg->pa_recxs_num = recxs_num;
 			break;
 		default:
@@ -914,32 +899,26 @@ out:
 	return rc;
 }
 
-static int
-cmd_parse_update_fetch(test_arg_t *arg, int argc, char **argv, int opc,
-		       struct test_op_record **op)
+static int cmd_parse_update_fetch(test_arg_t *arg, int argc, char **argv,
+				  int opc, struct test_op_record **op)
 {
-	struct test_op_record		*op_rec;
-	struct test_update_fetch_arg	*uf_arg;
-	daos_recx_t			*recxs = NULL;
-	int				*values = NULL;
-	unsigned int			 recx_num = 0;
-	char				*dkey = NULL;
-	char				*akey = NULL;
-	daos_epoch_t			 epoch = 1;
-	bool				 array = true;
-	int				 opt;
-	int				 rc = 0;
+	struct test_op_record *       op_rec;
+	struct test_update_fetch_arg *uf_arg;
+	daos_recx_t *                 recxs    = NULL;
+	int *                         values   = NULL;
+	unsigned int                  recx_num = 0;
+	char *                        dkey     = NULL;
+	char *                        akey     = NULL;
+	daos_epoch_t                  epoch    = 1;
+	bool                          array    = true;
+	int                           opt;
+	int                           rc = 0;
 
 	static struct epoch_io_cmd_option options[] = {
-		{"--dkey",	true,	'd'},
-		{"--akey",	true,	'a'},
-		{"--single",	false,	's'},
-		{"--epoch",	true,	'e'},
-		{"--recx",	true,	'r'},
-		{"--verify",	false,	'v'},
-		{"--value",	true,	'u'},
-		{0}
-	};
+	    {"--dkey", true, 'd'},    {"--akey", true, 'a'},
+	    {"--single", false, 's'}, {"--epoch", true, 'e'},
+	    {"--recx", true, 'r'},    {"--verify", false, 'v'},
+	    {"--value", true, 'u'},   {0}};
 
 	D_ALLOC_PTR(op_rec);
 	if (op_rec == NULL)
@@ -975,17 +954,17 @@ cmd_parse_update_fetch(test_arg_t *arg, int argc, char **argv, int opc,
 					      eio_optarg, rc);
 				D_GOTO(out, rc);
 			}
-			uf_arg->ua_recxs = recxs;
-			uf_arg->ua_values = values;
+			uf_arg->ua_recxs    = recxs;
+			uf_arg->ua_values   = values;
 			uf_arg->ua_recx_num = recx_num;
 #if CMD_LINE_DBG
 			int i;
 
 			for (i = 0; i < recx_num; i++) {
-				print_message("parsed recx - rx_idx[%d] "DF_U64
-					      ", rx_nr[%d] "DF_U64"\n",
-					      i, recxs[i].rx_idx,
-					      i, recxs[i].rx_nr);
+				print_message("parsed recx - rx_idx[%d] " DF_U64
+					      ", rx_nr[%d] " DF_U64 "\n",
+					      i, recxs[i].rx_idx, i,
+					      recxs[i].rx_nr);
 			}
 #endif
 			break;
@@ -996,7 +975,7 @@ cmd_parse_update_fetch(test_arg_t *arg, int argc, char **argv, int opc,
 	}
 
 	op_rec->or_epoch = epoch;
-	op_rec->or_op = opc;
+	op_rec->or_op    = opc;
 	uf_arg->ua_array = array;
 	if (uf_arg->ua_array && uf_arg->ua_recxs == NULL) {
 		print_message("no recx specified for array update/fetch.\n");
@@ -1019,21 +998,17 @@ out:
 	return rc;
 }
 
-static int
-cmd_parse_oid(test_arg_t *arg, int argc, char **argv)
+static int cmd_parse_oid(test_arg_t *arg, int argc, char **argv)
 {
-	struct epoch_io_args	*eio_arg = &arg->eio_args;
-	int			opt;
-	char			*obj_class = NULL;
-	int			type;
-	d_rank_t		rank = -1;
-	int			rc = 0;
+	struct epoch_io_args *eio_arg = &arg->eio_args;
+	int                   opt;
+	char *                obj_class = NULL;
+	int                   type;
+	d_rank_t              rank = -1;
+	int                   rc   = 0;
 
 	static struct epoch_io_cmd_option options[] = {
-		{"--type",	true,	't'},
-		{"--rank",	true,	'r'},
-		{0}
-	};
+	    {"--type", true, 't'}, {"--rank", true, 'r'}, {0}};
 
 	eio_optind = 1;
 	while ((opt = epoch_io_getopt(argc, argv, options)) != -1) {
@@ -1053,18 +1028,18 @@ cmd_parse_oid(test_arg_t *arg, int argc, char **argv)
 	if (obj_class == NULL)
 		D_GOTO(out, rc = -DER_INVAL);
 
-	type = daos_oclass_name2id(obj_class);
+	type            = daos_oclass_name2id(obj_class);
 	eio_arg->op_oid = dts_oid_gen(type, 0, arg->myrank);
 	if (type == DAOS_OC_R2S_SPEC_RANK || type == DAOS_OC_R3S_SPEC_RANK ||
 	    type == DAOS_OC_R1S_SPEC_RANK) {
 		if (rank == -1) {
 			rank = test_get_last_svr_rank(arg);
 			D_ASSERT(rank != -1);
-			eio_arg->op_oid = dts_oid_set_rank(eio_arg->op_oid,
-							   rank);
+			eio_arg->op_oid =
+			    dts_oid_set_rank(eio_arg->op_oid, rank);
 		} else {
-			eio_arg->op_oid = dts_oid_set_rank(eio_arg->op_oid,
-							   rank);
+			eio_arg->op_oid =
+			    dts_oid_set_rank(eio_arg->op_oid, rank);
 		}
 	}
 out:
@@ -1075,11 +1050,10 @@ out:
 }
 
 /* parse the cmd line to argc argv[] */
-static int
-cmd_parse_argv(char *cmd, int *argc, char *argv[])
+static int cmd_parse_argv(char *cmd, int *argc, char *argv[])
 {
-	int	 idx = 0;
-	char	*p = cmd;
+	int   idx = 0;
+	char *p   = cmd;
 
 	while (*p != '\0') {
 		while (*p == ' ')
@@ -1093,7 +1067,7 @@ cmd_parse_argv(char *cmd, int *argc, char *argv[])
 			if (*p == '\0')
 				return -DER_INVAL;
 			argv[idx++] = p;
-			p = strchr(p, '"');
+			p           = strchr(p, '"');
 			if (p == NULL)
 				return -DER_INVAL;
 			*p = '\0';
@@ -1102,7 +1076,7 @@ cmd_parse_argv(char *cmd, int *argc, char *argv[])
 			if (*p == '\0')
 				break;
 			argv[idx++] = p;
-			p = strchr(p, ' ');
+			p           = strchr(p, ' ');
 			if (p == NULL)
 				break;
 			*p = '\0';
@@ -1114,19 +1088,16 @@ cmd_parse_argv(char *cmd, int *argc, char *argv[])
 	return 0;
 }
 
-static int
-cmd_parse_pool(test_arg_t *arg, int argc, char *argv[],
-	       struct test_op_record **op)
+static int cmd_parse_pool(test_arg_t *arg, int argc, char *argv[],
+			  struct test_op_record **op)
 {
-	struct test_op_record		*op_rec = NULL;
-	int				opc = -1;
-	int				opt;
-	int				rc = 0;
+	struct test_op_record *op_rec = NULL;
+	int                    opc    = -1;
+	int                    opt;
+	int                    rc = 0;
 
-	static struct epoch_io_cmd_option options[] = {
-		{"--query",	false,	'q'},
-		{0}
-	};
+	static struct epoch_io_cmd_option options[] = {{"--query", false, 'q'},
+						       {0}};
 
 	D_ALLOC_PTR(op_rec);
 	if (op_rec == NULL)
@@ -1149,17 +1120,15 @@ cmd_parse_pool(test_arg_t *arg, int argc, char *argv[],
 		D_GOTO(out, rc = -DER_INVAL);
 
 	op_rec->or_op = opc;
-	*op = op_rec;
+	*op           = op_rec;
 out:
 	if (rc && op_rec)
 		D_FREE(op_rec);
 	return rc;
-
-
 }
 
 static int cmd_parse_snapshot(test_arg_t *arg, int argc, char *argv[],
-			  struct test_op_record **op)
+			      struct test_op_record **op)
 {
 	struct test_op_record *op_rec;
 	struct test_punch_arg *pu_arg;
@@ -1230,16 +1199,16 @@ out:
 	return rc;
 }
 
-static int
-cmd_line_parse(test_arg_t *arg, char *cmd_line, struct test_op_record **op)
+static int cmd_line_parse(test_arg_t *arg, char *cmd_line,
+			  struct test_op_record **op)
 {
-	char			 cmd[CMD_LINE_LEN_MAX] = { 0 };
-	struct test_op_record	*op_rec = NULL;
-	char			*argv[CMD_LINE_ARGC_MAX] = { 0 };
-	char			*dkey = NULL;
-	char			*akey = NULL;
-	int			 argc = 0;
-	int			 rc = 0;
+	char                   cmd[CMD_LINE_LEN_MAX]   = {0};
+	struct test_op_record *op_rec                  = NULL;
+	char *                 argv[CMD_LINE_ARGC_MAX] = {0};
+	char *                 dkey                    = NULL;
+	char *                 akey                    = NULL;
+	int                    argc                    = 0;
+	int                    rc                      = 0;
 
 	strncpy(cmd, cmd_line, CMD_LINE_LEN_MAX);
 #if CMD_LINE_DBG
@@ -1310,18 +1279,19 @@ out:
 
 #define AKEY_PATH_LEN (PATH_MAX - 10)
 /* replay the OPs which epoch <= /a epoch in key_rec's op_queue */
-static int
-test_op_queue_replay(test_arg_t *arg, struct test_key_record *key_rec,
-		     daos_epoch_t epoch)
+static int test_op_queue_replay(test_arg_t *            arg,
+				struct test_key_record *key_rec,
+				daos_epoch_t            epoch)
 {
-	struct test_op_record	*op_rec;
-	char			 akey_dir[AKEY_PATH_LEN] = { 0 };
-	char			 array_path[PATH_MAX] = { 0 };
-	char			 single_path[PATH_MAX] = { 0 };
-	int			 rc = 0;
+	struct test_op_record *op_rec;
+	char                   akey_dir[AKEY_PATH_LEN] = {0};
+	char                   array_path[PATH_MAX]    = {0};
+	char                   single_path[PATH_MAX]   = {0};
+	int                    rc                      = 0;
 
 #if CMD_LINE_DBG
-	print_message("replay %s/%s, epoch "DF_U64", replayed_epoch "DF_U64"\n",
+	print_message("replay %s/%s, epoch " DF_U64 ", replayed_epoch " DF_U64
+		      "\n",
 		      key_rec->or_dkey, key_rec->or_akey, epoch,
 		      key_rec->or_replayed_epoch);
 #endif
@@ -1346,21 +1316,21 @@ test_op_queue_replay(test_arg_t *arg, struct test_key_record *key_rec,
 		test_rmdir(akey_dir, true);
 		rc = epoch_io_mkdir(akey_dir);
 		if (rc) {
-			print_message("failed to mkdir %s, rc %d.\n",
-				      akey_dir, rc);
+			print_message("failed to mkdir %s, rc %d.\n", akey_dir,
+				      rc);
 			return rc;
 		}
 		snprintf(array_path, PATH_MAX, "%s/array", akey_dir);
 		snprintf(single_path, PATH_MAX, "%s/single", akey_dir);
-		key_rec->or_fd_array = open(array_path,
-			O_CREAT | O_TRUNC | O_RDWR, 0666);
+		key_rec->or_fd_array =
+		    open(array_path, O_CREAT | O_TRUNC | O_RDWR, 0666);
 		if (key_rec->or_fd_array == 0) {
-			print_message("failed to open %s, %d(%s)\n",
-				      array_path, errno, strerror(errno));
+			print_message("failed to open %s, %d(%s)\n", array_path,
+				      errno, strerror(errno));
 			return daos_errno2der(errno);
 		}
-		key_rec->or_fd_single = open(single_path,
-			O_CREAT | O_TRUNC | O_RDWR, 0666);
+		key_rec->or_fd_single =
+		    open(single_path, O_CREAT | O_TRUNC | O_RDWR, 0666);
 		if (key_rec->or_fd_single == 0) {
 			print_message("failed to open %s, %d(%s)\n",
 				      single_path, errno, strerror(errno));
@@ -1370,13 +1340,13 @@ test_op_queue_replay(test_arg_t *arg, struct test_key_record *key_rec,
 		}
 	}
 
-	d_list_for_each_entry(op_rec, &key_rec->or_queue, or_queue_link) {
+	d_list_for_each_entry (op_rec, &key_rec->or_queue, or_queue_link) {
 		if (op_rec->or_epoch < key_rec->or_replayed_epoch)
 			continue;
 		if (op_rec->or_epoch > epoch)
 			break;
-		rc = op_dict[op_rec->or_op].op_cb[TEST_LVL_FIO](
-			arg, op_rec, NULL, NULL);
+		rc = op_dict[op_rec->or_op].op_cb[TEST_LVL_FIO](arg, op_rec,
+								NULL, NULL);
 		if (rc == 0) {
 			key_rec->or_replayed_epoch = op_rec->or_epoch;
 		} else {
@@ -1385,7 +1355,7 @@ test_op_queue_replay(test_arg_t *arg, struct test_key_record *key_rec,
 			close(key_rec->or_fd_array);
 			key_rec->or_fd_array = 0;
 			close(key_rec->or_fd_single);
-			key_rec->or_fd_single = 0;
+			key_rec->or_fd_single      = 0;
 			key_rec->or_replayed_epoch = 0;
 			return rc;
 		}
@@ -1394,28 +1364,26 @@ test_op_queue_replay(test_arg_t *arg, struct test_key_record *key_rec,
 	return rc;
 }
 
-static int
-cmd_line_run(test_arg_t *arg, struct test_op_record *op_rec)
+static int cmd_line_run(test_arg_t *arg, struct test_op_record *op_rec)
 {
-	int		 op = op_rec->or_op;
-	int		 lvl = arg->eio_args.op_lvl;
-	char		*buf = NULL, *f_buf = NULL;
-	daos_size_t	 size = 0, f_size = 0;
-	int		 rc = 0;
+	int         op  = op_rec->or_op;
+	int         lvl = arg->eio_args.op_lvl;
+	char *      buf = NULL, *f_buf = NULL;
+	daos_size_t size = 0, f_size = 0;
+	int         rc = 0;
 
 	D_ASSERT(op >= TEST_OP_MIN && op <= TEST_OP_MAX);
 	D_ASSERT(lvl == TEST_LVL_DAOS || lvl == TEST_LVL_VOS);
 
 	/* for modification OP, just go through DAOS stack and return */
-	print_message("Operation = %d\n", op);
 	if (test_op_is_modify(op))
 		return op_dict[op].op_cb[lvl](arg, op_rec, NULL, 0);
 
 	/* for verification OP, firstly retrieve it through DAOS stack */
 	rc = op_dict[op].op_cb[lvl](arg, op_rec, &buf, &size);
 	if (rc) {
-		print_message("op_dict[%d].op_cb[%d] failed, rc %d.\n",
-			      op, lvl, rc);
+		print_message("op_dict[%d].op_cb[%d] failed, rc %d.\n", op, lvl,
+			      rc);
 		D_GOTO(out, rc);
 	}
 
@@ -1427,25 +1395,26 @@ cmd_line_run(test_arg_t *arg, struct test_op_record *op_rec)
 	 */
 	rc = test_op_queue_replay(arg, op_rec->or_key_rec, op_rec->or_epoch);
 	if (rc) {
-		print_message("test_op_queue_replay epoch "DF_U64" failed, "
-			      "rc %d.\n", op_rec->or_epoch, rc);
+		print_message("test_op_queue_replay epoch " DF_U64 " failed, "
+			      "rc %d.\n",
+			      op_rec->or_epoch, rc);
 		D_GOTO(out, rc);
 	}
 
-	rc = op_dict[op].op_cb[TEST_LVL_FIO](arg, op_rec, &f_buf,  &f_size);
+	rc = op_dict[op].op_cb[TEST_LVL_FIO](arg, op_rec, &f_buf, &f_size);
 	if (rc) {
-		print_message("op_dict[%d].op_cb[%d] failed, rc %d.\n",
-			      op, TEST_LVL_FIO, rc);
+		print_message("op_dict[%d].op_cb[%d] failed, rc %d.\n", op,
+			      TEST_LVL_FIO, rc);
 		D_GOTO(out, rc);
 	}
 
 	if (size != f_size) {
-		print_message("size mismatch ("DF_U64" vs "DF_U64").\n",
+		print_message("size mismatch (" DF_U64 " vs " DF_U64 ").\n",
 			      size, f_size);
 		D_GOTO(out, rc = -DER_MISMATCH);
 	}
 	if (memcmp(buf, f_buf, size) != 0) {
-		int	i, j;
+		int i, j;
 
 		print_message("data verification failed.\n");
 		/* print first 8 mismatched data */
@@ -1467,13 +1436,12 @@ out:
 	return rc;
 }
 
-int
-io_conf_run(test_arg_t *arg, const char *io_conf)
+int io_conf_run(test_arg_t *arg, const char *io_conf)
 {
-	struct test_op_record	*op = NULL;
-	FILE			*fp;
-	char			 cmd_line[CMD_LINE_LEN_MAX];
-	int			 rc = 0;
+	struct test_op_record *op = NULL;
+	FILE *                 fp;
+	char                   cmd_line[CMD_LINE_LEN_MAX];
+	int                    rc = 0;
 
 	if (io_conf == NULL || strlen(io_conf) == 0) {
 		print_message("invalid io_conf.\n");
@@ -1484,8 +1452,8 @@ io_conf_run(test_arg_t *arg, const char *io_conf)
 
 	fp = fopen(io_conf, "r");
 	if (fp == NULL) {
-		print_message("failed to open io_conf %s, %d(%s).\n",
-			      io_conf, errno, strerror(errno));
+		print_message("failed to open io_conf %s, %d(%s).\n", io_conf,
+			      errno, strerror(errno));
 		return daos_errno2der(errno);
 	}
 
@@ -1506,7 +1474,8 @@ io_conf_run(test_arg_t *arg, const char *io_conf)
 			rc = cmd_line_run(arg, op);
 			if (rc) {
 				print_message("run cmd_line %s failed, "
-					      "rc %d.\n", cmd_line, rc);
+					      "rc %d.\n",
+					      cmd_line, rc);
 				break;
 			}
 		}
@@ -1516,12 +1485,11 @@ io_conf_run(test_arg_t *arg, const char *io_conf)
 	return rc;
 }
 
-static void
-epoch_io_predefined(void **state)
+static void epoch_io_predefined(void **state)
 {
-	test_arg_t	*arg = *state;
-	int		 i;
-	int		 rc;
+	test_arg_t *arg = *state;
+	int         i;
+	int         rc;
 
 	if (test_io_conf != NULL && strlen(test_io_conf) > 0) {
 		print_message("will run predefined io_conf %s ...\n",
@@ -1545,24 +1513,23 @@ epoch_io_predefined(void **state)
 				      predefined_io_confs[i], rc);
 		else
 			print_message("io_conf %s succeed.\n",
-				     predefined_io_confs[i]);
+				      predefined_io_confs[i]);
 		assert_int_equal(rc, 0);
 		test_eio_arg_oplist_free(arg);
 	}
 }
 
 static const struct CMUnitTest epoch_io_tests[] = {
-	{ "EPOCH_IO1: predefined IO conf testing",
-	  epoch_io_predefined, async_disable, test_case_teardown},
+    {"EPOCH_IO1: predefined IO conf testing", epoch_io_predefined,
+     async_disable, test_case_teardown},
 };
 
-static int
-epoch_io_setup(void **state)
+static int epoch_io_setup(void **state)
 {
-	test_arg_t		*arg;
-	struct epoch_io_args	*eio_arg;
-	char			*tmp_str;
-	int			 rc;
+	test_arg_t *          arg;
+	struct epoch_io_args *eio_arg;
+	char *                tmp_str;
+	int                   rc;
 
 	/* generate the temporary IO dir for epoch IO test */
 	if (test_io_dir == NULL) {
@@ -1576,7 +1543,7 @@ epoch_io_setup(void **state)
 		return -DER_NOMEM;
 	D_FREE(test_io_dir);
 	test_io_dir = tmp_str;
-	rc = epoch_io_mkdir(test_io_dir);
+	rc          = epoch_io_mkdir(test_io_dir);
 	if (rc)
 		return rc;
 
@@ -1602,12 +1569,12 @@ epoch_io_setup(void **state)
 		      test_io_dir, test_io_work_dir, test_io_fail_dir);
 
 	obj_setup(state);
-	arg = *state;
+	arg     = *state;
 	eio_arg = &arg->eio_args;
 	D_INIT_LIST_HEAD(&eio_arg->op_list);
-	eio_arg->op_lvl = TEST_LVL_DAOS;
+	eio_arg->op_lvl      = TEST_LVL_DAOS;
 	eio_arg->op_iod_size = 1;
-	eio_arg->op_oid = dts_oid_gen(dts_obj_class, 0, arg->myrank);
+	eio_arg->op_oid      = dts_oid_gen(dts_obj_class, 0, arg->myrank);
 
 	return 0;
 
@@ -1619,11 +1586,10 @@ free_work:
 	return rc;
 }
 
-static int
-epoch_io_teardown(void **state)
+static int epoch_io_teardown(void **state)
 {
-	test_arg_t		*arg = *state;
-	struct epoch_io_args	*eio_arg = &arg->eio_args;
+	test_arg_t *          arg     = *state;
+	struct epoch_io_args *eio_arg = &arg->eio_args;
 
 	test_eio_arg_oplist_free(arg);
 
@@ -1635,15 +1601,14 @@ epoch_io_teardown(void **state)
 	return test_teardown(state);
 }
 
-int
-run_daos_epoch_io_test(int rank, int size, int *sub_tests, int sub_tests_size)
+int run_daos_epoch_io_test(int rank, int size, int *sub_tests,
+			   int sub_tests_size)
 {
 	int rc;
 
 	MPI_Barrier(MPI_COMM_WORLD);
-	rc = cmocka_run_group_tests_name("DAOS epoch I/O tests",
-			epoch_io_tests, epoch_io_setup,
-			epoch_io_teardown);
+	rc = cmocka_run_group_tests_name("DAOS epoch I/O tests", epoch_io_tests,
+					 epoch_io_setup, epoch_io_teardown);
 	MPI_Barrier(MPI_COMM_WORLD);
 	return rc;
 }
