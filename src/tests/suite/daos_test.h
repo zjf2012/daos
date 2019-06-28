@@ -26,24 +26,24 @@
  */
 #ifndef __DAOS_TEST_H
 #define __DAOS_TEST_H
-#if !defined(__has_warning)  /* gcc */
-	#pragma GCC diagnostic ignored "-Wframe-larger-than="
+#if !defined(__has_warning) /* gcc */
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
 #else
-	#if __has_warning("-Wframe-larger-than=") /* valid clang warning */
-		#pragma GCC diagnostic ignored "-Wframe-larger-than="
-	#endif
+#if __has_warning("-Wframe-larger-than=") /* valid clang warning */
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
+#endif
 #endif
 
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
+#include <dirent.h>
+#include <linux/limits.h>
+#include <setjmp.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <setjmp.h>
-#include <time.h>
-#include <linux/limits.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/stat.h>
-#include <dirent.h>
+#include <time.h>
+#include <unistd.h>
 
 #include <cmocka.h>
 /* redefine cmocka's skip() so it will no longer abort()
@@ -52,22 +52,22 @@
  * it can't be redefined as a function as it must return from current context
  */
 #undef skip
-#define skip() \
-	do { \
-		const char *abort_test = getenv("CMOCKA_TEST_ABORT"); \
-		if (abort_test != NULL && abort_test[0] == '1') \
-			print_message("Skipped !!!\n"); \
-		else \
-			_skip(__FILE__, __LINE__); \
-		return; \
-	} while  (0)
+#define skip()                                                                 \
+	do {                                                                   \
+		const char *abort_test = getenv("CMOCKA_TEST_ABORT");          \
+		if (abort_test != NULL && abort_test[0] == '1')                \
+			print_message("Skipped !!!\n");                        \
+		else                                                           \
+			_skip(__FILE__, __LINE__);                             \
+		return;                                                        \
+	} while (0)
 
-#include <mpi.h>
-#include <daos/debug.h>
+#include <daos.h>
 #include <daos/common.h>
+#include <daos/debug.h>
 #include <daos/mgmt.h>
 #include <daos/tests_lib.h>
-#include <daos.h>
+#include <mpi.h>
 
 /** Server crt group ID */
 extern const char *server_group;
@@ -81,169 +81,156 @@ extern char *test_io_dir;
 extern const char *test_io_conf;
 
 extern int daos_event_priv_reset(void);
-#define TEST_RANKS_MAX_NUM	(13)
+#define TEST_RANKS_MAX_NUM (13)
 
 /* the pool used for daos test suite */
 struct test_pool {
-	d_rank_t		ranks[TEST_RANKS_MAX_NUM];
-	uuid_t			pool_uuid;
-	daos_handle_t		poh;
-	daos_pool_info_t	pool_info;
-	daos_size_t		pool_size;
-	d_rank_list_t		svc;
+	d_rank_t         ranks[TEST_RANKS_MAX_NUM];
+	uuid_t           pool_uuid;
+	daos_handle_t    poh;
+	daos_pool_info_t pool_info;
+	daos_size_t      pool_size;
+	d_rank_list_t    svc;
 	/* flag of slave that share the pool of other test_arg_t */
-	bool			slave;
-	bool			destroyed;
+	bool slave;
+	bool destroyed;
 };
 
 struct epoch_io_args {
-	d_list_t		 op_list;
-	int			 op_lvl; /* enum test_level */
-	daos_size_t		 op_iod_size;
+	d_list_t    op_list;
+	int         op_lvl; /* enum test_level */
+	daos_size_t op_iod_size;
 	/* now using only one oid, can change later when needed */
-	daos_obj_id_t		 op_oid;
+	daos_obj_id_t op_oid;
 	/* cached dkey/akey used last time, so need not specify it every time */
-	char			*op_dkey;
-	char			*op_akey;
-	int			op_no_verify:1;
+	char *op_dkey;
+	char *op_akey;
+	int   op_no_verify : 1;
 };
 
 typedef struct {
-	bool			multi_rank;
-	int			myrank;
-	int			rank_size;
-	const char	       *group;
-	struct test_pool	pool;
-	uuid_t			co_uuid;
-	unsigned int		mode;
-	unsigned int		uid;
-	unsigned int		gid;
-	daos_handle_t		eq;
-	daos_handle_t		coh;
-	daos_cont_info_t	co_info;
-	int			setup_state;
-	bool			async;
-	bool			hdl_share;
-	uint64_t		fail_loc;
-	uint64_t		fail_num;
-	uint64_t		fail_value;
-	bool			overlap;
-	int			expect_result;
-	daos_size_t		size;
-	int			nr;
-	int			srv_nnodes;
-	int			srv_ntgts;
-	int			srv_disabled_ntgts;
-	int			index;
-	daos_epoch_t		hce;
+	bool             multi_rank;
+	int              myrank;
+	int              rank_size;
+	const char *     group;
+	struct test_pool pool;
+	uuid_t           co_uuid;
+	unsigned int     mode;
+	unsigned int     uid;
+	unsigned int     gid;
+	daos_handle_t    eq;
+	daos_handle_t    coh;
+	daos_cont_info_t co_info;
+	int              setup_state;
+	bool             async;
+	bool             hdl_share;
+	uint64_t         fail_loc;
+	uint64_t         fail_num;
+	uint64_t         fail_value;
+	bool             overlap;
+	int              expect_result;
+	daos_size_t      size;
+	int              nr;
+	int              srv_nnodes;
+	int              srv_ntgts;
+	int              srv_disabled_ntgts;
+	int              index;
+	daos_epoch_t     hce;
+	daos_epoch_t     snap_epoch;
 
 	/* The callback is called before pool rebuild. like disconnect
 	 * pool etc.
 	 */
-	int			(*rebuild_pre_cb)(void *test_arg);
-	void			*rebuild_pre_cb_arg;
+	int (*rebuild_pre_cb)(void *test_arg);
+	void *rebuild_pre_cb_arg;
 
 	/* The callback is called during pool rebuild, used for concurrent IO,
 	 * container destroy etc
 	 */
-	int			(*rebuild_cb)(void *test_arg);
-	void			*rebuild_cb_arg;
+	int (*rebuild_cb)(void *test_arg);
+	void *rebuild_cb_arg;
 	/* The callback is called after pool rebuild, used for validating IO
 	 * after rebuild
 	 */
-	int			(*rebuild_post_cb)(void *test_arg);
-	void			*rebuild_post_cb_arg;
+	int (*rebuild_post_cb)(void *test_arg);
+	void *rebuild_post_cb_arg;
 	/* epoch IO OP queue */
-	struct epoch_io_args	eio_args;
+	struct epoch_io_args eio_args;
 } test_arg_t;
 
-enum {
-	SETUP_EQ,
-	SETUP_POOL_CREATE,
-	SETUP_POOL_CONNECT,
-	SETUP_CONT_CREATE,
-	SETUP_CONT_CONNECT,
+enum { SETUP_EQ,
+       SETUP_POOL_CREATE,
+       SETUP_POOL_CONNECT,
+       SETUP_CONT_CREATE,
+       SETUP_CONT_CONNECT,
 };
 
-#define DEFAULT_POOL_SIZE	(4ULL << 30)
+#define DEFAULT_POOL_SIZE (4ULL << 30)
 
-#define WAIT_ON_ASYNC_ERR(arg, ev, err)			\
-	do {						\
-		int _rc;					\
-		daos_event_t *evp;			\
-							\
-		if (!arg->async)			\
-			break;				\
-							\
-		_rc = daos_eq_poll(arg->eq, 1,		\
-				  DAOS_EQ_WAIT,		\
-				  1, &evp);		\
-		assert_int_equal(_rc, 1);		\
-		assert_ptr_equal(evp, &ev);		\
-		assert_int_equal(ev.ev_error, err);	\
+#define WAIT_ON_ASYNC_ERR(arg, ev, err)                                        \
+	do {                                                                   \
+		int           _rc;                                             \
+		daos_event_t *evp;                                             \
+                                                                               \
+		if (!arg->async)                                               \
+			break;                                                 \
+                                                                               \
+		_rc = daos_eq_poll(arg->eq, 1, DAOS_EQ_WAIT, 1, &evp);         \
+		assert_int_equal(_rc, 1);                                      \
+		assert_ptr_equal(evp, &ev);                                    \
+		assert_int_equal(ev.ev_error, err);                            \
 	} while (0)
 
 #define WAIT_ON_ASYNC(arg, ev) WAIT_ON_ASYNC_ERR(arg, ev, 0)
 
-int
-test_teardown(void **state);
-int
-test_setup(void **state, unsigned int step, bool multi_rank,
-	   daos_size_t pool_size, struct test_pool *pool);
-int
-test_setup_next_step(void **state, struct test_pool *pool, daos_prop_t *po_prop,
-		     daos_prop_t *co_prop);
+int test_teardown(void **state);
+int test_setup(void **state, unsigned int step, bool multi_rank,
+	       daos_size_t pool_size, struct test_pool *pool);
+int test_setup_next_step(void **state, struct test_pool *pool,
+			 daos_prop_t *po_prop, daos_prop_t *co_prop);
 
-static inline int
-async_enable(void **state)
+static inline int async_enable(void **state)
 {
-	test_arg_t	*arg = *state;
+	test_arg_t *arg = *state;
 
 	arg->overlap = false;
 	arg->async   = true;
 	return 0;
 }
 
-static inline int
-async_disable(void **state)
+static inline int async_disable(void **state)
 {
-	test_arg_t	*arg = *state;
+	test_arg_t *arg = *state;
 
 	arg->overlap = false;
 	arg->async   = false;
 	return 0;
 }
 
-static inline int
-async_overlap(void **state)
+static inline int async_overlap(void **state)
 {
-	test_arg_t	*arg = *state;
+	test_arg_t *arg = *state;
 
 	arg->overlap = true;
 	arg->async   = true;
 	return 0;
 }
 
-static inline int
-test_case_teardown(void **state)
+static inline int test_case_teardown(void **state)
 {
 	assert_int_equal(daos_event_priv_reset(), 0);
 	return 0;
 }
 
-static inline int
-hdl_share_enable(void **state)
+static inline int hdl_share_enable(void **state)
 {
-	test_arg_t	*arg = *state;
+	test_arg_t *arg = *state;
 
 	arg->hdl_share = true;
 	return 0;
 }
 
-enum {
-	HANDLE_POOL,
-	HANDLE_CO
-};
+enum { HANDLE_POOL, HANDLE_CO };
 
 int run_daos_mgmt_test(int rank, int size);
 int run_daos_pool_test(int rank, int size);
@@ -267,8 +254,8 @@ typedef int (*test_setup_cb_t)(void **state);
 typedef int (*test_teardown_cb_t)(void **state);
 
 bool test_runable(test_arg_t *arg, unsigned int required_tgts);
-int test_pool_get_info(test_arg_t *arg, daos_pool_info_t *pinfo);
-int test_get_leader(test_arg_t *arg, d_rank_t *rank);
+int  test_pool_get_info(test_arg_t *arg, daos_pool_info_t *pinfo);
+int  test_get_leader(test_arg_t *arg, d_rank_t *rank);
 bool test_rebuild_query(test_arg_t **args, int args_cnt);
 void test_rebuild_wait(test_arg_t **args, int args_cnt);
 void daos_exclude_target(const uuid_t pool_uuid, const char *grp,
@@ -286,19 +273,17 @@ int run_daos_sub_tests(const struct CMUnitTest *tests, int tests_size,
 		       int sub_tests_size, test_setup_cb_t setup_cb,
 		       test_teardown_cb_t teardown_cb);
 
-static inline void
-daos_test_print(int rank, char *message)
+static inline void daos_test_print(int rank, char *message)
 {
 	if (!rank)
 		print_message("%s\n", message);
 }
 
-static inline void
-handle_share(daos_handle_t *hdl, int type, int rank, daos_handle_t poh,
-	     int verbose)
+static inline void handle_share(daos_handle_t *hdl, int type, int rank,
+				daos_handle_t poh, int verbose)
 {
-	d_iov_t	ghdl = { NULL, 0, 0 };
-	int		rc;
+	d_iov_t ghdl = {NULL, 0, 0};
+	int     rc;
 
 	if (rank == 0) {
 		/** fetch size of global handle */
@@ -321,8 +306,8 @@ handle_share(daos_handle_t *hdl, int type, int rank, daos_handle_t poh,
 		/** generate actual global handle to share with peer tasks */
 		if (verbose)
 			print_message("rank 0 call local2global on %s handle",
-				      (type == HANDLE_POOL) ?
-				      "pool" : "container");
+				      (type == HANDLE_POOL) ? "pool"
+							    : "container");
 		if (type == HANDLE_POOL)
 			rc = daos_pool_local2global(*hdl, &ghdl);
 		else
@@ -336,8 +321,7 @@ handle_share(daos_handle_t *hdl, int type, int rank, daos_handle_t poh,
 	if (rank == 0 && verbose == 1)
 		print_message("rank 0 broadcast global %s handle ...",
 			      (type == HANDLE_POOL) ? "pool" : "container");
-	rc = MPI_Bcast(ghdl.iov_buf, ghdl.iov_len, MPI_BYTE, 0,
-		       MPI_COMM_WORLD);
+	rc = MPI_Bcast(ghdl.iov_buf, ghdl.iov_len, MPI_BYTE, 0, MPI_COMM_WORLD);
 	assert_int_equal(rc, MPI_SUCCESS);
 	if (rank == 0 && verbose == 1)
 		print_message("success\n");
@@ -345,9 +329,9 @@ handle_share(daos_handle_t *hdl, int type, int rank, daos_handle_t poh,
 	if (rank != 0) {
 		/** unpack global handle */
 		if (verbose)
-			print_message("rank %d call global2local on %s handle",
-				      rank, type == HANDLE_POOL ?
-				      "pool" : "container");
+			print_message(
+			    "rank %d call global2local on %s handle", rank,
+			    type == HANDLE_POOL ? "pool" : "container");
 		if (type == HANDLE_POOL) {
 			/* NB: Only pool_global2local are different */
 			rc = daos_pool_global2local(ghdl, hdl);
@@ -365,23 +349,22 @@ handle_share(daos_handle_t *hdl, int type, int rank, daos_handle_t poh,
 	MPI_Barrier(MPI_COMM_WORLD);
 }
 
-#define MAX_KILLS	3
+#define MAX_KILLS 3
 extern d_rank_t ranks_to_kill[MAX_KILLS];
-d_rank_t test_get_last_svr_rank(test_arg_t *arg);
+d_rank_t        test_get_last_svr_rank(test_arg_t *arg);
 
 /* make dir including its parent dir */
-static inline int
-test_mkdir(char *dir, mode_t mode)
+static inline int test_mkdir(char *dir, mode_t mode)
 {
-	char	*p;
-	mode_t	 stored_mode;
-	char	 parent_dir[PATH_MAX] = { 0 };
+	char * p;
+	mode_t stored_mode;
+	char   parent_dir[PATH_MAX] = {0};
 
 	if (dir == NULL || *dir == '\0')
 		return daos_errno2der(errno);
 
 	stored_mode = umask(0);
-	p = strrchr(dir, '/');
+	p           = strrchr(dir, '/');
 	if (p != NULL) {
 		strncpy(parent_dir, dir, p - dir);
 		if (access(parent_dir, F_OK) != 0)
@@ -389,8 +372,8 @@ test_mkdir(char *dir, mode_t mode)
 
 		if (access(dir, F_OK) != 0) {
 			if (mkdir(dir, mode) != 0) {
-				print_message("mkdir %s failed %d.\n",
-					      dir, errno);
+				print_message("mkdir %s failed %d.\n", dir,
+					      errno);
 				return daos_errno2der(errno);
 			}
 		}
@@ -401,13 +384,12 @@ test_mkdir(char *dir, mode_t mode)
 }
 
 /* force == 1 to remove non-empty directory */
-static inline int
-test_rmdir(const char *path, bool force)
+static inline int test_rmdir(const char *path, bool force)
 {
-	DIR    *dir;
+	DIR *          dir;
 	struct dirent *ent;
-	char   *fullpath = NULL;
-	int    rc = 0, len;
+	char *         fullpath = NULL;
+	int            rc       = 0, len;
 
 	D_ASSERT(path != NULL);
 	len = strlen(path);
@@ -430,14 +412,14 @@ test_rmdir(const char *path, bool force)
 		D_FREE(fullpath);
 		if (errno == ENOENT)
 			D_GOTO(out, rc);
-		D_ERROR("can't open directory %s, %d (%s)",
-			path, errno, strerror(errno));
+		D_ERROR("can't open directory %s, %d (%s)", path, errno,
+			strerror(errno));
 		D_GOTO(out, rc = daos_errno2der(errno));
 	}
 
 	while ((ent = readdir(dir)) != NULL) {
 		if (!strcmp(ent->d_name, ".") || !strcmp(ent->d_name, ".."))
-			continue;   /* skips the dots */
+			continue; /* skips the dots */
 
 		sprintf(fullpath, "%s/%s", path, ent->d_name);
 		switch (ent->d_type) {

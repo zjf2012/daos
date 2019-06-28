@@ -41,6 +41,9 @@ const char *test_io_conf;
 #define CMD_LINE_ARGC_MAX (16)
 #define CMD_LINE_DBG 0
 
+daos_epoch_t snap1_epoch;
+int          count;
+
 /*
  * To add predefined io_conf:
  * and add file name to predefined_io_confs array before the NULL.
@@ -152,9 +155,19 @@ static int daos_test_cb_snap(test_arg_t *arg, struct test_op_record *op,
 	daos_epoch_t  snap_epoch;
 	daos_anchor_t anchor;
 	int           snap_count_out;
+	extern daos_epoch_t  snap1_epoch;
+	extern int           count;
 
 	rc = daos_cont_create_snap(arg->coh, &snap_epoch, NULL, NULL);
 	op->or_epoch = snap_epoch;
+	arg->snap_epoch = snap_epoch;
+
+	if (count == 0) {
+		snap1_epoch = snap_epoch;
+		count++;
+	}
+
+
     daos_cont_list_snap(arg->coh, &snap_count_out, NULL, NULL, &anchor, NULL);
 	print_message("Number of Snapshot=%d %"PRIu64"\n", snap_count_out, snap_epoch);
 
@@ -177,6 +190,11 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 	struct ioreq                  req;
 	daos_handle_t				  th_open;
 	int                           rc = 0;
+	extern daos_epoch_t                       snap1_epoch;
+	extern int                                count;
+				
+
+	printf(" Tx Number = %" PRIu64 "\n", op->or_epoch);
 
 	if (array)
 		D_ASSERT(uf_arg->ua_recxs != NULL && uf_arg->ua_recx_num >= 1);
@@ -208,17 +226,20 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 				     buf_size, &req);
 	} else {
 		if (op->or_op == TEST_OP_UPDATE) {
-			printf("--------------------- insert epoch dkey=%s \n",dkey);
 			insert_single(dkey, akey, 0, buf, buf_size, DAOS_TX_NONE, &req);
 		} else {
+			if (count >= 1) {
+				arg->snap_epoch = snap1_epoch;
+			}
+
 			printf("--------------------- In lookup epoch before daos_tx_open_snap = %" PRIu64 "\n",
-			       op->or_epoch);
-			rc = daos_tx_open_snap(arg->coh, op->or_epoch, &th_open,
+			       arg->snap_epoch);
+			rc = daos_tx_open_snap(arg->coh, arg->snap_epoch, &th_open,
 					  NULL);
-			print_message("%d", rc);
+			D_ASSERT(rc == 0);
 
 			printf("--------------------- In lookup epoch after daos_tx_open_snap = %" PRIu64 "\n",
-			       op->or_epoch);
+			       arg->snap_epoch);
 			lookup_single(dkey, akey, 0, buf, buf_size, th_open,
 				      &req);
 		}
@@ -1465,6 +1486,7 @@ int io_conf_run(test_arg_t *arg, const char *io_conf)
 
 		print_message("---cmd_line--- %s\n", cmd_line);
 		rc = cmd_line_parse(arg, cmd_line, &op);
+
 		if (rc != 0) {
 			print_message("bad cmd_line %s, exit.\n", cmd_line);
 			break;
