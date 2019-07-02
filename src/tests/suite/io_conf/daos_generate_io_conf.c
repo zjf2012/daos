@@ -39,22 +39,22 @@ static char *obj_class;
 #define MAX_EXT_NUM 5
 #define MAX_DISTANCE 10
 #define MAX_EXTENT_SIZE 50
-#define MAX_OFFSET 1048
+#define MAX_OFFSET 1048576
 #define SINGLE_REC_RATE 20
 #define MAX_EPOCH_TIMES 20
 
 enum op {
 	UPDATE_ARRAY,
+	FETCH,
 	PUNCH_ARRAY,
 	PUNCH_AKEY,
-	FETCH,
 	MAX_OPS,
 };
 
 enum single_record_op {
 	UPDATE_SINGLE,
-	PUNCH_AKEY_SINGLE,
 	FETCH_SINGLE,
+	PUNCH_AKEY_SINGLE,
 	MAX_OPS_SINGLE,
 };
 
@@ -148,7 +148,7 @@ static int update_array_internal(int index, daos_epoch_t eph,
 				 int rec_size, struct records *records,
 				 char *output_buf, bool update)
 {
-	char rec_buf[8];
+	char rec_buf[512];
 	int  rec_length = 0;
 	bool twist      = false;
 	int  twist_off  = 0;
@@ -293,21 +293,50 @@ static int fetch_array(int index, daos_epoch_t eph, struct extent *extents,
 		rec_length += length + 1;
 	}
 
-	if (rec_length == 0) {
-		sprintf(output_buf,
-			"fetch --tx " DF_U64 " -s -v --value 0\n",
-			record->eph);
-	} else {
+	if (rec_length != 0) {
+		if (record->records[0].type == ARRAY)
+			sprintf(output_buf,
+				"fetch --tx " DF_U64 " -v --recx"
+				" \"%s\"\n",
+				record->eph, rec_buf);
+	}
+
+	return 0;
+}
+
+static int fetch_single(int index, daos_epoch_t eph, struct extent *extents,
+		       int extents_num, int rec_size, struct records *records,
+		       char *output_buf)
+{
+	struct records *record;
+	char            rec_buf[512] = {0};
+	int             fetch_index;
+	int             rec_length = 0;
+	int             i;
+
+	D_ASSERT(index > 0);
+
+	fetch_index = rand() % index;
+	record      = &records[fetch_index];
+	for (i = 0; i < record->records_num; i++) {
+		struct array *array = &record->records[i].array;
+		int           length;
+		char          rec[64];
+
+		length = sprintf(rec, "[" DF_U64 ", " DF_U64 "]%d",
+				 array->extent.start, array->extent.end,
+				 array->value);
+
+		sprintf(rec_buf + rec_length, "%s ", rec);
+		rec_length += length + 1;
+	}
+
+	if (rec_length != 0) {
 		if (record->records[0].type == SINGLE)
 			sprintf(output_buf,
 				"fetch --tx " DF_U64 " -v --single"
 				" --value %d\n",
 				record->eph, record->records[0].single.value);
-		else
-			sprintf(output_buf,
-				"fetch --tx " DF_U64 " -v --recx"
-				" \"%s\"\n",
-				record->eph, rec_buf);
 	}
 
 	return 0;
@@ -335,17 +364,17 @@ struct operation operations[] = {
 	{
 	    .op = &update_array,
 	},
-    [PUNCH_ARRAY] =
+    [FETCH] =
+	{
+	    .op = &fetch_array,
+	},
+	[PUNCH_ARRAY] =
 	{
 	    .op = &punch_array,
 	},
     [PUNCH_AKEY] =
 	{
 	    .op = &_punch_akey,
-	},
-    [FETCH] =
-	{
-	    .op = &fetch_array,
 	},
 };
 
@@ -354,13 +383,13 @@ struct operation single_operations[] = {
 	{
 	    .op = &update_single,
 	},
-    [PUNCH_AKEY_SINGLE] =
-	{
-	    .op = &_punch_akey,
-	},
     [FETCH_SINGLE] =
 	{
-	    .op = &fetch_array,
+	    .op = &fetch_single,
+	},
+	[PUNCH_AKEY_SINGLE] =
+	{
+	    .op = &_punch_akey,
 	},
 };
 

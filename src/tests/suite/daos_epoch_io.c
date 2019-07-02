@@ -41,9 +41,9 @@ const char *test_io_conf;
 #define CMD_LINE_ARGC_MAX (16)
 #define CMD_LINE_DBG 0
 
-daos_epoch_t snap1_epoch;
+
 int          count;
-daos_epoch_t sn_epoch[20];
+daos_epoch_t sn_epoch[100];
 
 /*
  * To add predefined io_conf:
@@ -104,8 +104,11 @@ static int test_buf_verify(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
 
 	if (recxs == NULL) {
 		for (i = 0; i < buf_size; i++) {
-			print_message("--------------Verification result i %d got %d expect %d\n", i, (int)buf[i],
-				      (int)*values);
+			if (buf[i] != *values) {
+				print_message("i %d got %d expect %d\n", i,
+					      (int)buf[i], (int)*values);
+				return -1;
+			}
 		}
 		return 0;
 	}
@@ -115,9 +118,12 @@ static int test_buf_verify(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
 		int         j;
 
 		for (j = 0; j < size; j++) {
-			print_message("i %d j %d got %d"
-				      " expect %d\n",
-				      i, j, (int)buf[j], values[i]);
+			if (buf[j] != values[i]) {
+				print_message("i %d j %d got %d"
+					      " expect %d\n",
+					      i, j, (int)buf[j], values[i]);
+				return -1;
+			}
 		}
 
 		buf += size;
@@ -163,7 +169,6 @@ static int daos_test_cb_snap(test_arg_t *arg, struct test_op_record *op,
 	op->or_epoch = snap_epoch;
 	arg->snap_epoch = snap_epoch;
 	sn_epoch[count] = snap_epoch;
-	count++;
     daos_cont_list_snap(arg->coh, &snap_count_out, NULL, NULL, &anchor, NULL);
 	//print_message("Number of Snapshot=%d %"PRIu64"\n", snap_count_out, snap_epoch);
     print_message("--------------Number of Snapshot=%d\n",snap_count_out);
@@ -224,7 +229,8 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 		if (op->or_op == TEST_OP_UPDATE) {
 			insert_single(dkey, akey, 0, buf, buf_size, DAOS_TX_NONE, &req);
 		} else {
-			arg->snap_epoch = sn_epoch[(int)op->or_epoch];
+			arg->snap_epoch = sn_epoch[count];
+			count++;
 			/*printf("--------------------- In lookup epoch before daos_tx_open_snap = %" PRIu64 "\n",
 			       arg->snap_epoch);*/
 			rc = daos_tx_open_snap(arg->coh, arg->snap_epoch, &th_open,
