@@ -39,7 +39,7 @@ static char *obj_class;
 #define MAX_EXT_NUM 5
 #define MAX_DISTANCE 10
 #define MAX_EXTENT_SIZE 50
-#define MAX_OFFSET 1048576
+#define MAX_OFFSET 1048
 #define SINGLE_REC_RATE 20
 #define MAX_EPOCH_TIMES 20
 
@@ -148,7 +148,7 @@ static int update_array_internal(int index, daos_epoch_t eph,
 				 int rec_size, struct records *records,
 				 char *output_buf, bool update)
 {
-	char rec_buf[512];
+	char rec_buf[8];
 	int  rec_length = 0;
 	bool twist      = false;
 	int  twist_off  = 0;
@@ -209,11 +209,11 @@ static int update_array_internal(int index, daos_epoch_t eph,
 	}
 
 	if (update)
-		sprintf(output_buf, "update --epoch " DF_U64 " --recx \"%s\"\n"
-			"create_snap --epoch " DF_U64 " \n",
+		sprintf(output_buf, "update --tx " DF_U64 " --recx \"%s\"\n"
+			"create_snap --tx " DF_U64 " \n",
 			eph, rec_buf, eph);
 	else
-		sprintf(output_buf, "punch --epoch " DF_U64 " --recx \"%s\"\n",
+		sprintf(output_buf, "punch --tx " DF_U64 " --recx \"%s\"\n",
 			eph, rec_buf);
 
 	return 0;
@@ -241,7 +241,7 @@ static int _punch_akey(int index, daos_epoch_t eph, struct extent *extents,
 {
 	records[index].eph         = eph;
 	records[index].records_num = 0;
-	sprintf(output_buf, "punch --epoch " DF_U64 "\n", eph);
+	sprintf(output_buf, "punch --tx " DF_U64 "\n", eph);
 	return 0;
 }
 
@@ -259,8 +259,8 @@ static int update_single(int index, daos_epoch_t eph, struct extent *extents,
 	records[index].records[0].type         = SINGLE;
 	records[index].records[0].single.value = value;
 
-	sprintf(output_buf, "update --epoch " DF_U64 " --single --value %d\n"
-		"create_snap --epoch " DF_U64 " \n",
+	sprintf(output_buf, "update --tx " DF_U64 " --single --value %d\n"
+		"create_snap --tx " DF_U64 " \n",
 		eph, value, eph);
 
 	return 0;
@@ -295,17 +295,17 @@ static int fetch_array(int index, daos_epoch_t eph, struct extent *extents,
 
 	if (rec_length == 0) {
 		sprintf(output_buf,
-			"fetch --epoch " DF_U64 " -s -v --value 0\n",
+			"fetch --tx " DF_U64 " -s -v --value 0\n",
 			record->eph);
 	} else {
 		if (record->records[0].type == SINGLE)
 			sprintf(output_buf,
-				"fetch --epoch " DF_U64 " -v --single"
+				"fetch --tx " DF_U64 " -v --single"
 				" --value %d\n",
 				record->eph, record->records[0].single.value);
 		else
 			sprintf(output_buf,
-				"fetch --epoch " DF_U64 " -v --recx"
+				"fetch --tx " DF_U64 " -v --recx"
 				" \"%s\"\n",
 				record->eph, rec_buf);
 	}
@@ -366,17 +366,17 @@ struct operation single_operations[] = {
 
 /* Generate the ioconf
  *
- * update --epoch 1 --recx "[0, 2] [3, 8] [12, 18]"
- * update --epoch 1 --single
- * update --epoch 2 --recx "[1, 3] [5, 10] [12, 14] [100, 108]"
- * update --epoch 3 --recx "[0, 8] [13, 17] [90, 104]"
- * update --epoch 4 --recx "[1, 20] [80, 96] [110, 120]"
- * update --epoch 4 --single
+ * update --tx 1 --recx "[0, 2] [3, 8] [12, 18]"
+ * update --tx 1 --single
+ * update --tx 2 --recx "[1, 3] [5, 10] [12, 14] [100, 108]"
+ * update --tx 3 --recx "[0, 8] [13, 17] [90, 104]"
+ * update --tx 4 --recx "[1, 20] [80, 96] [110, 120]"
+ * update --tx 4 --single
  *
  * fail --rank %d --tgt %d
- * fetch --epoch 1 --recx "[0, 2] [3, 8] [12, 18]"
- * fetch --epoch 2 --recx "[0, 4] [5, 7] [13, 15] [100, 108]"
- * fetch --epoch 2 --single
+ * fetch --tx 1 --recx "[0, 2] [3, 8] [12, 18]"
+ * fetch --tx 2 --recx "[0, 4] [5, 7] [13, 15] [100, 108]"
+ * fetch --tx 2 --single
  */
 int generate_io_conf_rec(int fd, struct current_status *status)
 {

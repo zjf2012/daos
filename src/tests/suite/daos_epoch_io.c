@@ -853,7 +853,7 @@ static int cmd_parse_punch(test_arg_t *arg, int argc, char **argv,
 
 	static struct epoch_io_cmd_option options[] = {{"--dkey", true, 'd'},
 						       {"--akey", true, 'a'},
-						       {"--epoch", true, 'e'},
+						       {"--tx", true, 'e'},
 						       {"--recx", true, 'r'},
 						       {0}};
 
@@ -927,7 +927,7 @@ static int cmd_parse_update_fetch(test_arg_t *arg, int argc, char **argv,
 
 	static struct epoch_io_cmd_option options[] = {
 	    {"--dkey", true, 'd'},    {"--akey", true, 'a'},
-	    {"--single", false, 's'}, {"--epoch", true, 'e'},
+	    {"--single", false, 's'}, {"--tx", true, 'e'},
 	    {"--recx", true, 'r'},    {"--verify", false, 'v'},
 	    {"--value", true, 'u'},   {0}};
 
@@ -1153,7 +1153,7 @@ static int cmd_parse_snapshot(test_arg_t *arg, int argc, char *argv[],
 
 	static struct epoch_io_cmd_option options[] = {{"--dkey", true, 'd'},
 						       {"--akey", true, 'a'},
-						       {"--epoch", true, 'e'},
+						       {"--tx", true, 'e'},
 						       {"--recx", true, 'r'},
 						       {0}};
 
