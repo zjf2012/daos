@@ -43,6 +43,7 @@ const char *test_io_conf;
 
 daos_epoch_t snap1_epoch;
 int          count;
+daos_epoch_t sn_epoch[20];
 
 /*
  * To add predefined io_conf:
@@ -103,7 +104,7 @@ static int test_buf_verify(char *buf, daos_size_t buf_size, daos_recx_t *recxs,
 
 	if (recxs == NULL) {
 		for (i = 0; i < buf_size; i++) {
-			print_message("i %d got %d expect %d\n", i, (int)buf[i],
+			print_message("--------------Verification result i %d got %d expect %d\n", i, (int)buf[i],
 				      (int)*values);
 		}
 		return 0;
@@ -155,21 +156,17 @@ static int daos_test_cb_snap(test_arg_t *arg, struct test_op_record *op,
 	daos_epoch_t  snap_epoch;
 	daos_anchor_t anchor;
 	int           snap_count_out;
-	extern daos_epoch_t  snap1_epoch;
-	extern int           count;
+	extern daos_epoch_t sn_epoch[];
+	extern int          count;
 
 	rc = daos_cont_create_snap(arg->coh, &snap_epoch, NULL, NULL);
 	op->or_epoch = snap_epoch;
 	arg->snap_epoch = snap_epoch;
-
-	if (count == 0) {
-		snap1_epoch = snap_epoch;
-		count++;
-	}
-
-
+	sn_epoch[count] = snap_epoch;
+	count++;
     daos_cont_list_snap(arg->coh, &snap_count_out, NULL, NULL, &anchor, NULL);
-	print_message("Number of Snapshot=%d %"PRIu64"\n", snap_count_out, snap_epoch);
+	//print_message("Number of Snapshot=%d %"PRIu64"\n", snap_count_out, snap_epoch);
+    print_message("--------------Number of Snapshot=%d\n",snap_count_out);
 
 	return rc;
 }
@@ -190,11 +187,10 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 	struct ioreq                  req;
 	daos_handle_t				  th_open;
 	int                           rc = 0;
-	extern daos_epoch_t                       snap1_epoch;
-	extern int                                count;
-				
+	extern int                    count;
+	extern daos_epoch_t           sn_epoch[];
 
-	printf(" Tx Number = %" PRIu64 "\n", op->or_epoch);
+	//printf(" Tx Number = %" PRIu64 "\n", op->or_epoch);
 
 	if (array)
 		D_ASSERT(uf_arg->ua_recxs != NULL && uf_arg->ua_recx_num >= 1);
@@ -228,18 +224,12 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 		if (op->or_op == TEST_OP_UPDATE) {
 			insert_single(dkey, akey, 0, buf, buf_size, DAOS_TX_NONE, &req);
 		} else {
-			if (count >= 1) {
-				arg->snap_epoch = snap1_epoch;
-			}
-
-			printf("--------------------- In lookup epoch before daos_tx_open_snap = %" PRIu64 "\n",
-			       arg->snap_epoch);
+			arg->snap_epoch = sn_epoch[(int)op->or_epoch];
+			/*printf("--------------------- In lookup epoch before daos_tx_open_snap = %" PRIu64 "\n",
+			       arg->snap_epoch);*/
 			rc = daos_tx_open_snap(arg->coh, arg->snap_epoch, &th_open,
 					  NULL);
 			D_ASSERT(rc == 0);
-
-			printf("--------------------- In lookup epoch after daos_tx_open_snap = %" PRIu64 "\n",
-			       arg->snap_epoch);
 			lookup_single(dkey, akey, 0, buf, buf_size, th_open,
 				      &req);
 		}
