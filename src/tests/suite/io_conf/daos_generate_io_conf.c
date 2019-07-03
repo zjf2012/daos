@@ -68,7 +68,7 @@ struct current_status {
 	int          cur_dkey_num;
 	int          cur_akey_num;
 	int          cur_rank;
-	daos_epoch_t cur_eph;
+	int			cur_tx;
 };
 
 enum rec_types {
@@ -100,7 +100,7 @@ struct record {
 };
 
 struct records {
-	daos_epoch_t  eph;
+	int			  eph;
 	int           records_num;
 	struct record records[MAX_EXT_NUM];
 	bool          snapshot;
@@ -143,7 +143,7 @@ static void extent_twist(struct extent *input, struct extent *output, int off,
 	}
 }
 
-static int update_array_internal(int index, daos_epoch_t eph,
+static int update_array_internal(int index, int eph,
 				 struct extent *extents, int extents_num,
 				 int rec_size, struct records *records,
 				 char *output_buf, bool update)
@@ -209,17 +209,17 @@ static int update_array_internal(int index, daos_epoch_t eph,
 	}
 
 	if (update)
-		sprintf(output_buf, "update --tx " DF_U64 " --recx \"%s\"\n"
-			"create_snap --tx " DF_U64 " \n",
+		sprintf(output_buf, "update --tx %d --recx \"%s\"\n"
+			"create_snap --tx %d \n",
 			eph, rec_buf, eph);
 	else
-		sprintf(output_buf, "punch --tx " DF_U64 " --recx \"%s\"\n",
+		sprintf(output_buf, "punch --tx %d --recx \"%s\"\n",
 			eph, rec_buf);
 
 	return 0;
 }
 
-static int update_array(int index, daos_epoch_t eph, struct extent *extents,
+static int update_array(int index, int eph, struct extent *extents,
 			int extents_num, int rec_size, struct records *records,
 			char *output_buf)
 {
@@ -227,7 +227,7 @@ static int update_array(int index, daos_epoch_t eph, struct extent *extents,
 				     records, output_buf, true);
 }
 
-static int punch_array(int index, daos_epoch_t eph, struct extent *extents,
+static int punch_array(int index, int eph, struct extent *extents,
 		       int extents_num, int rec_size, struct records *records,
 		       char *output_buf)
 {
@@ -235,18 +235,18 @@ static int punch_array(int index, daos_epoch_t eph, struct extent *extents,
 				     records, output_buf, false);
 }
 
-static int _punch_akey(int index, daos_epoch_t eph, struct extent *extents,
+static int _punch_akey(int index, int eph, struct extent *extents,
 		       int extents_num, int rec_size, struct records *records,
 		       char *output_buf)
 {
 	records[index].eph         = eph;
 	records[index].records_num = 0;
-	sprintf(output_buf, "punch --tx " DF_U64 "\n", eph);
+	sprintf(output_buf, "punch --tx %d\n", eph);
 	return 0;
 }
 
 /* Update single record */
-static int update_single(int index, daos_epoch_t eph, struct extent *extents,
+static int update_single(int index, int eph, struct extent *extents,
 			 int extents_num, int rec_size, struct records *records,
 			 char *output_buf)
 {
@@ -259,14 +259,14 @@ static int update_single(int index, daos_epoch_t eph, struct extent *extents,
 	records[index].records[0].type         = SINGLE;
 	records[index].records[0].single.value = value;
 
-	sprintf(output_buf, "update --tx " DF_U64 " --single --value %d\n"
-		"create_snap --tx " DF_U64 " \n",
+	sprintf(output_buf, "update --tx %d --single --value %d\n"
+		"create_snap --tx %d \n",
 		eph, value, eph);
 
 	return 0;
 }
 
-static int fetch_array(int index, daos_epoch_t eph, struct extent *extents,
+static int fetch_array(int index, int eph, struct extent *extents,
 		       int extents_num, int rec_size, struct records *records,
 		       char *output_buf)
 {
@@ -296,15 +296,14 @@ static int fetch_array(int index, daos_epoch_t eph, struct extent *extents,
 	if (rec_length != 0) {
 		if (record->records[0].type == ARRAY)
 			sprintf(output_buf,
-				"fetch --tx " DF_U64 " -v --recx"
-				" \"%s\"\n",
+				"fetch --tx %d -v --recx \"%s\"\n",
 				record->eph, rec_buf);
 	}
 
 	return 0;
 }
 
-static int fetch_single(int index, daos_epoch_t eph, struct extent *extents,
+static int fetch_single(int index, int eph, struct extent *extents,
 		       int extents_num, int rec_size, struct records *records,
 		       char *output_buf)
 {
@@ -334,7 +333,7 @@ static int fetch_single(int index, daos_epoch_t eph, struct extent *extents,
 	if (rec_length != 0) {
 		if (record->records[0].type == SINGLE)
 			sprintf(output_buf,
-				"fetch --tx " DF_U64 " -v --single"
+				"fetch --tx %d -v --single"
 				" --value %d\n",
 				record->eph, record->records[0].single.value);
 	}
@@ -354,7 +353,7 @@ int choose_op(int index, int max_operation)
 }
 
 struct operation {
-	int (*op)(int index, daos_epoch_t eph, struct extent *extents,
+	int (*op)(int index, int eph, struct extent *extents,
 		  int extents_num, int rec_size, struct records *records,
 		  char *output_buf);
 };
@@ -413,7 +412,7 @@ int generate_io_conf_rec(int fd, struct current_status *status)
 	unsigned int   offset                = 0;
 	struct extent  extents[MAX_EXT_NUM]  = {0};
 	struct records recs[MAX_EPOCH_TIMES] = {0};
-	daos_epoch_t   eph;
+	int			   eph;
 	int            dist;
 	int            extent_num;
 	int            extent_size;
@@ -443,7 +442,7 @@ int generate_io_conf_rec(int fd, struct current_status *status)
 		offset += extent_size + dist;
 	}
 
-	eph                   = status->cur_eph;
+	eph                   = status->cur_tx;
 	inject_fail_idx       = rand() % epoch_times;
 	tgt                   = rand() % tgt_size;
 	enum type record_type = rand() % 2;
@@ -501,7 +500,7 @@ int generate_io_conf_rec(int fd, struct current_status *status)
 	}
 	rc = 0;
 
-	status->cur_eph += i;
+	status->cur_tx += i;
 out:
 	return rc;
 }
@@ -533,6 +532,7 @@ int generate_io_conf_dkey(int fd, struct current_status *status)
 	int  rc = 0;
 
 	while (status->cur_dkey_num < dkey_num) {
+		status->cur_tx = 0;
 		sprintf(dkey, "dkey dkey_%d\n", status->cur_dkey_num);
 		rc = write(fd, dkey, strlen(dkey));
 		if (rc <= 0) {
