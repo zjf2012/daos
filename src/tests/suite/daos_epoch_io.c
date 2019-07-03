@@ -152,26 +152,6 @@ static int daos_test_cb_punch(test_arg_t *arg, struct test_op_record *op,
 	return 0;
 }
 
-static int daos_test_cb_snap(test_arg_t *arg, struct test_op_record *op,
-			     char **rbuf, daos_size_t *rbuf_size)
-{
-	//daos_epoch_t snap;
-	int          rc = 0;
-	daos_epoch_t  snap_epoch;
-	daos_anchor_t anchor;
-	int           snap_count_out;
-	extern daos_epoch_t sn_epoch[];
-
-	rc = daos_cont_create_snap(arg->coh, &snap_epoch, NULL, NULL);
-	arg->snap_epoch = snap_epoch;
-	sn_epoch[op->tx] = snap_epoch;
-    daos_cont_list_snap(arg->coh, &snap_count_out, NULL, NULL, &anchor, NULL);
-	//print_message("Number of Snapshot=%d %"PRIu64"\n", snap_count_out, snap_epoch);
-    print_message("--------------Number of Snapshot=%d\n",snap_count_out);
-
-	return rc;
-}
-
 static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 			   char **rbuf, daos_size_t *rbuf_size)
 {
@@ -186,11 +166,14 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 	daos_size_t                   buf_size;
 	char *                        buf = NULL;
 	struct ioreq                  req;
-	daos_handle_t				  th_open;
+	daos_handle_t                 th_open;
 	int                           rc = 0;
 	extern daos_epoch_t           sn_epoch[];
+	daos_epoch_t                  snap_epoch;
+	daos_anchor_t                 anchor;
+	int                           snap_count_out;
 
-	//printf(" Tx Number = %" PRIu64 "\n", op->or_epoch);
+	// printf(" Tx Number = %" PRIu64 "\n", op->or_epoch);
 
 	if (array)
 		D_ASSERT(uf_arg->ua_recxs != NULL && uf_arg->ua_recx_num >= 1);
@@ -222,16 +205,31 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 				     buf_size, &req);
 	} else {
 		if (op->or_op == TEST_OP_UPDATE) {
-			insert_single(dkey, akey, 0, buf, buf_size, DAOS_TX_NONE, &req);
+			insert_single(dkey, akey, 0, buf, buf_size,
+				      DAOS_TX_NONE, &req);
+			if (uf_arg->snap == true) {
+				rc = daos_cont_create_snap(arg->coh, &snap_epoch, NULL, NULL);
+				arg->snap_epoch  = snap_epoch;
+				sn_epoch[op->tx] = snap_epoch;
+				daos_cont_list_snap(arg->coh, &snap_count_out,
+						    NULL, NULL, &anchor, NULL);
+				print_message("--------------Number of Snapshot=%d\n",
+					snap_count_out);
+			}
+
 		} else {
-			arg->snap_epoch = sn_epoch[op->tx];
-			/*printf("--------------------- In lookup epoch before daos_tx_open_snap = %" PRIu64 "\n",
-			       arg->snap_epoch);*/
-			rc = daos_tx_open_snap(arg->coh, arg->snap_epoch, &th_open,
-					  NULL);
-			D_ASSERT(rc == 0);
-			lookup_single(dkey, akey, 0, buf, buf_size, th_open,
-				      &req);
+			if (uf_arg->snap == true) {
+				arg->snap_epoch = sn_epoch[op->tx];
+				/*printf("--------------------- In lookup epoch
+				before daos_tx_open_snap = %" PRIu64 "\n", arg->snap_epoch);*/
+				rc = daos_tx_open_snap(
+				    arg->coh, arg->snap_epoch, &th_open, NULL);
+				D_ASSERT(rc == 0);
+				lookup_single(dkey, akey, 0, buf, buf_size,
+					      th_open, &req);
+			}
+			lookup_single(dkey, akey, 0, buf, buf_size,
+				      DAOS_TX_NONE, &req);
 		}
 	}
 
@@ -460,16 +458,6 @@ struct test_op_dict op_dict[] = {
 	.op_cb =
 	    {
 		daos_test_cb_query,
-		test_cb_noop,
-		test_cb_noop,
-	    },
-    },
-    {
-	.op_type = TEST_OP_SNAPSHOT_CREATE,
-	.op_str  = "create_snap",
-	.op_cb =
-	    {
-		daos_test_cb_snap,
 		test_cb_noop,
 		test_cb_noop,
 	    },
@@ -847,7 +835,7 @@ static int cmd_parse_punch(test_arg_t *arg, int argc, char **argv,
 	char *                 akey  = NULL;
 	daos_recx_t *          recxs = NULL;
 	unsigned int           recxs_num;
-	int					   tx = 1;
+	int                    tx = 1;
 	int                    opt;
 	int                    rc = 0;
 
@@ -920,28 +908,36 @@ static int cmd_parse_update_fetch(test_arg_t *arg, int argc, char **argv,
 	unsigned int                  recx_num = 0;
 	char *                        dkey     = NULL;
 	char *                        akey     = NULL;
-	int							  tx = 1;
+	int                           tx       = 1;
 	bool                          array    = true;
 	int                           opt;
 	int                           rc = 0;
 
-	static struct epoch_io_cmd_option options[] = {
-	    {"--dkey", true, 'd'},    {"--akey", true, 'a'},
-	    {"--single", false, 's'}, {"--tx", true, 'e'},
-	    {"--recx", true, 'r'},    {"--verify", false, 'v'},
-	    {"--value", true, 'u'},   {0}};
+	static struct epoch_io_cmd_option options[] = {{"--dkey", true, 'd'},
+						       {"--akey", true, 'a'},
+						       {"--single", false, 's'},
+						       {"--tx", true, 'e'},
+						       {"--recx", true, 'r'},
+						       {"--verify", false, 'v'},
+						       {"--value", true, 'u'},
+						       {"--snap", false, 't'},
+						       {0}};
 
 	D_ALLOC_PTR(op_rec);
 	if (op_rec == NULL)
 		return -DER_NOMEM;
 	D_INIT_LIST_HEAD(&op_rec->or_queue_link);
-	uf_arg = &op_rec->uf_arg;
+	uf_arg       = &op_rec->uf_arg;
+	uf_arg->snap = false;
 
 	eio_optind = 1;
 	while ((opt = epoch_io_getopt(argc, argv, options)) != -1) {
 		switch (opt) {
 		case 'e':
 			tx = atoi(eio_optarg);
+			break;
+		case 't':
+			uf_arg->snap = true;
 			break;
 		case 'd':
 			D_STRNDUP(dkey, eio_optarg, strlen(eio_optarg));
@@ -985,7 +981,7 @@ static int cmd_parse_update_fetch(test_arg_t *arg, int argc, char **argv,
 		}
 	}
 
-	op_rec->tx = tx;
+	op_rec->tx       = tx;
 	op_rec->or_op    = opc;
 	uf_arg->ua_array = array;
 	if (uf_arg->ua_array && uf_arg->ua_recxs == NULL) {
@@ -1147,7 +1143,7 @@ static int cmd_parse_snapshot(test_arg_t *arg, int argc, char *argv[],
 	char *                 akey  = NULL;
 	daos_recx_t *          recxs = NULL;
 	unsigned int           recxs_num;
-	int					   tx = 1;
+	int                    tx = 1;
 	int                    opt;
 	int                    rc = 0;
 

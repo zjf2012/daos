@@ -41,7 +41,7 @@ static char *obj_class;
 #define MAX_EXTENT_SIZE 50
 #define MAX_OFFSET 1048576
 #define SINGLE_REC_RATE 20
-#define MAX_EPOCH_TIMES 20
+#define MAX_EPOCH_TIMES 50 /*SAMIR to increase this?*/
 
 enum op {
 	UPDATE_ARRAY,
@@ -64,11 +64,11 @@ enum type {
 };
 
 struct current_status {
-	int          cur_obj_num;
-	int          cur_dkey_num;
-	int          cur_akey_num;
-	int          cur_rank;
-	int          cur_tx;
+	int cur_obj_num;
+	int cur_dkey_num;
+	int cur_akey_num;
+	int cur_rank;
+	int cur_tx;
 };
 
 enum rec_types {
@@ -95,15 +95,15 @@ struct record {
 		struct array  array;
 		struct single single;
 	};
-	int rec_size;
-	int type;
+	int  rec_size;
+	int  type;
+	bool snap;
 };
 
 struct records {
-	int			  eph;
+	int           eph;
 	int           records_num;
 	struct record records[MAX_EXT_NUM];
-	bool          snapshot;
 };
 
 static struct option long_ops[] = {
@@ -143,10 +143,10 @@ static void extent_twist(struct extent *input, struct extent *output, int off,
 	}
 }
 
-static int update_array_internal(int index, int eph,
-				 struct extent *extents, int extents_num,
-				 int rec_size, struct records *records,
-				 char *output_buf, bool update)
+static int update_array_internal(int index, int eph, struct extent *extents,
+				 int extents_num, int rec_size,
+				 struct records *records, char *output_buf,
+				 bool update)
 {
 	char rec_buf[512];
 	int  rec_length = 0;
@@ -209,12 +209,11 @@ static int update_array_internal(int index, int eph,
 	}
 
 	if (update)
-		sprintf(output_buf, "update --tx %d --recx \"%s\"\n"
-			"create_snap --tx %d \n",
-			eph, rec_buf, eph);
+		sprintf(output_buf, "update --tx %d --recx \"%s\"\n", eph,
+			rec_buf);
 	else
-		sprintf(output_buf, "punch --tx %d --recx \"%s\"\n",
-			eph, rec_buf);
+		sprintf(output_buf, "punch --tx %d --recx \"%s\"\n", eph,
+			rec_buf);
 
 	return 0;
 }
@@ -259,10 +258,16 @@ static int update_single(int index, int eph, struct extent *extents,
 	records[index].records[0].type         = SINGLE;
 	records[index].records[0].single.value = value;
 
-	sprintf(output_buf, "update --tx %d --single --value %d\n"
-		"create_snap --tx %d \n",
-		eph, value, eph);
-
+	if (value % 2 != 0) {
+		records[index].records[0].snap = true;
+		sprintf(output_buf, "update --tx %d --snap --single --value %d\n", eph,
+			value);
+	} else {
+		records[index].records[0].snap = false;
+		sprintf(output_buf, "update --tx %d --single --value %d\n", eph,
+			value);
+	}
+	
 	return 0;
 }
 
@@ -295,8 +300,7 @@ static int fetch_array(int index, int eph, struct extent *extents,
 
 	if (rec_length != 0) {
 		if (record->records[0].type == ARRAY)
-			sprintf(output_buf,
-				"fetch --tx %d -v --recx \"%s\"\n",
+			sprintf(output_buf, "fetch --tx %d -v --recx \"%s\"\n",
 				record->eph, rec_buf);
 	}
 
@@ -304,8 +308,8 @@ static int fetch_array(int index, int eph, struct extent *extents,
 }
 
 static int fetch_single(int index, int eph, struct extent *extents,
-		       int extents_num, int rec_size, struct records *records,
-		       char *output_buf)
+			int extents_num, int rec_size, struct records *records,
+			char *output_buf)
 {
 	struct records *record;
 	char            rec_buf[512] = {0};
@@ -331,11 +335,13 @@ static int fetch_single(int index, int eph, struct extent *extents,
 	}
 
 	if (rec_length != 0) {
-		if (record->records[0].type == SINGLE)
-			sprintf(output_buf,
-				"fetch --tx %d -v --single"
-				" --value %d\n",
+		if (record->records[0].snap == true)
+		sprintf(output_buf, "fetch --tx %d -v --snap --single --value %d\n",
 				record->eph, record->records[0].single.value);
+		else
+			sprintf(output_buf, "fetch --tx %d --single --value %d\n",
+			    record->eph, record->records[0].single.value);
+
 	}
 
 	return 0;
@@ -353,9 +359,8 @@ int choose_op(int index, int max_operation)
 }
 
 struct operation {
-	int (*op)(int index, int eph, struct extent *extents,
-		  int extents_num, int rec_size, struct records *records,
-		  char *output_buf);
+	int (*op)(int index, int eph, struct extent *extents, int extents_num,
+		  int rec_size, struct records *records, char *output_buf);
 };
 
 struct operation operations[] = {
@@ -367,7 +372,7 @@ struct operation operations[] = {
 	{
 	    .op = &fetch_array,
 	},
-	[PUNCH_ARRAY] =
+    [PUNCH_ARRAY] =
 	{
 	    .op = &punch_array,
 	},
@@ -386,7 +391,7 @@ struct operation single_operations[] = {
 	{
 	    .op = &fetch_single,
 	},
-	[PUNCH_AKEY_SINGLE] =
+    [PUNCH_AKEY_SINGLE] =
 	{
 	    .op = &_punch_akey,
 	},
@@ -412,7 +417,7 @@ int generate_io_conf_rec(int fd, struct current_status *status)
 	unsigned int   offset                = 0;
 	struct extent  extents[MAX_EXT_NUM]  = {0};
 	struct records recs[MAX_EPOCH_TIMES] = {0};
-	int			   eph;
+	int            eph;
 	int            dist;
 	int            extent_num;
 	int            extent_size;
@@ -449,7 +454,7 @@ int generate_io_conf_rec(int fd, struct current_status *status)
 	for (i = 0; i < epoch_times; i++) {
 		char buffer[512];
 
-		/*sprintf(line, "---EPOch Number =  %d\n", i); //SAMIR
+		/* //SAMIR
 		rc = write(fd, line, strlen(line));
 		if (rc <= 0) {
 			rc = -1;
