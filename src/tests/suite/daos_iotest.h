@@ -220,15 +220,15 @@ struct test_punch_arg {
 /* one OP record per cmd line in the ioconf file */
 struct test_op_record {
 	/* link to test_key_record::or_queue */
-	d_list_t		 or_queue_link;
+	d_list_t		        or_queue_link;
 	struct test_key_record	*or_key_rec; /* back pointer */
-	daos_epoch_t		 or_epoch;
-	daos_epoch_t         snap_epoch;
-	enum test_op_type	 or_op;
+	int                     tx;
+	daos_epoch_t            snap_epoch;
+	enum test_op_type	    or_op;
 	union {
 		struct test_update_fetch_arg	uf_arg;
-		struct test_punch_arg		pu_arg;
-		struct test_add_exclude_arg	ae_arg;
+		struct test_punch_arg		    pu_arg;
+		struct test_add_exclude_arg	    ae_arg;
 	};
 };
 

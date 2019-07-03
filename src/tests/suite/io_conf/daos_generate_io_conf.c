@@ -68,7 +68,7 @@ struct current_status {
 	int          cur_dkey_num;
 	int          cur_akey_num;
 	int          cur_rank;
-	int			cur_tx;
+	int          cur_tx;
 };
 
 enum rec_types {
@@ -511,6 +511,7 @@ int generate_io_conf_akey(int fd, struct current_status *status)
 	int  rc = 0;
 
 	while (status->cur_akey_num < akey_num) {
+		status->cur_tx = 0;
 		sprintf(akey, "akey akey_%d\n", status->cur_akey_num);
 		rc = write(fd, akey, strlen(akey));
 		if (rc <= 0) {
@@ -532,7 +533,6 @@ int generate_io_conf_dkey(int fd, struct current_status *status)
 	int  rc = 0;
 
 	while (status->cur_dkey_num < dkey_num) {
-		status->cur_tx = 0;
 		sprintf(dkey, "dkey dkey_%d\n", status->cur_dkey_num);
 		rc = write(fd, dkey, strlen(dkey));
 		if (rc <= 0) {
