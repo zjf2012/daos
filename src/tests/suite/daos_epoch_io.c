@@ -213,8 +213,7 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 				sn_epoch[op->tx] = snap_epoch;
 				daos_cont_list_snap(arg->coh, &snap_count_out,
 						    NULL, NULL, &anchor, NULL);
-				print_message("--------------Number of Snapshot=%d\n",
-					snap_count_out);
+				//print_message("--------------Number of Snapshot=%d\n", snap_count_out);
 			}
 
 		} else {
@@ -227,9 +226,9 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 				D_ASSERT(rc == 0);
 				lookup_single(dkey, akey, 0, buf, buf_size,
 					      th_open, &req);
-			}
-			lookup_single(dkey, akey, 0, buf, buf_size,
-				      DAOS_TX_NONE, &req);
+			}else
+				lookup_single(dkey, akey, 0, buf, buf_size,
+					DAOS_TX_NONE, &req);
 		}
 	}
 
@@ -361,11 +360,20 @@ static int daos_test_cb_query(test_arg_t *arg, struct test_op_record *op,
 {
 	daos_pool_info_t pinfo = {0};
 	int              rc;
+	int              i;
 
+	pinfo.pi_bits = DPI_SPACE;
 	rc = daos_pool_query(arg->pool.poh, NULL, &pinfo, NULL, NULL);
-	if (rc != 0)
+	if (rc != 0){
 		print_message("pool query failed %d\n", rc);
+		return rc;
+	}
 
+	for (i=0;i<=1;i++)
+		print_message("  pool size: Total = %" PRIu64 "  Free= %" PRIu64"",
+			      pinfo.pi_space.ps_space.s_total[i],
+			      pinfo.pi_space.ps_space.s_free[i]);
+	print_message("\n");
 	return rc;
 }
 
@@ -1470,7 +1478,7 @@ int io_conf_run(test_arg_t *arg, const char *io_conf)
 		if (cmd_line_get(fp, cmd_line) != 0)
 			break;
 
-		print_message("---cmd_line--- %s\n", cmd_line);
+		//print_message("---cmd_line--- %s\n", cmd_line);
 		rc = cmd_line_parse(arg, cmd_line, &op);
 
 		if (rc != 0) {
