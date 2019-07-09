@@ -41,7 +41,7 @@ static char *obj_class;
 #define MAX_EXTENT_SIZE 50
 #define MAX_OFFSET 1048576
 #define SINGLE_REC_RATE 20
-#define MAX_EPOCH_TIMES 50 /*SAMIR to increase this?*/
+#define MAX_EPOCH_TIMES 50
 
 enum op {
 	UPDATE_ARRAY,
@@ -461,12 +461,11 @@ int generate_io_conf_rec(int fd, struct current_status *status)
 	for (i = 0; i < epoch_times; i++) {
 		char buffer[512];
 
-		/* //SAMIR
 		rc = write(fd, line, strlen(line));
 		if (rc <= 0) {
 			rc = -1;
 			goto out;
-		}*/
+		}
 		if (record_type == ARRAY) {
 			op = choose_op(i, MAX_OPS);
 			rc = (*operations[op].op)(i, eph + i, extents,
@@ -488,21 +487,21 @@ int generate_io_conf_rec(int fd, struct current_status *status)
 		if (inject_fail_idx == i) {
 			sprintf(line, "exclude --rank %d --tgt %d\n",
 				status->cur_rank, tgt);
-			/*rc = write(fd, line, strlen(line));  SAMIR
+			rc = write(fd, line, strlen(line));
 			if (rc <= 0) {
 				rc = -1;
 				goto out;
-			}*/
+			}
 		}
 	}
 
-	/* Add back the target SAMIR
+	/* Add back the target */
 	sprintf(line, "add --rank %d --tgt %d\n", status->cur_rank, tgt);
 	rc1 = write(fd, line, strlen(line));
 	if (rc1 <= 0) {
 		rc = -1;
 		goto out;
-	}*/
+	}
 
 	sprintf(line, "pool --query\n");
 	rc = write(fd, line, strlen(line));
@@ -571,12 +570,12 @@ int generate_io_conf_obj(int fd, struct current_status *status)
 
 		/* Fill the dkey first*/
 		sprintf(oid_buf, "oid --type %s --rank %d\n", obj_class, rank);
-		/* --SAMIR--
+		
 		rc = write(fd, oid_buf, strlen(oid_buf));
 		if (rc <= 0) {
 			rc = -1;
 			break;
-		}*/
+		}
 
 		status->cur_rank = rank;
 

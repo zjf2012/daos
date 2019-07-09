@@ -198,6 +198,7 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 		else
 			insert_single(dkey, akey, 0, buf, buf_size,
 				      DAOS_TX_NONE, &req);
+		/*Take the snapshot*/
 		if (uf_arg->snap == true) {
 			rc = daos_cont_create_snap(arg->coh, &snap_epoch, NULL,
 						   NULL);
@@ -206,6 +207,7 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 		}
 	} else{
 		th_open = DAOS_TX_NONE;
+		/*Open snaphot and read the data from snapshot epoch*/
 		if (uf_arg->snap == true) {
 			arg->snap_epoch = sn_epoch[op->tx];
 			rc = daos_tx_open_snap(arg->coh, arg->snap_epoch,
@@ -221,51 +223,6 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 			lookup_single(dkey, akey, 0, buf, buf_size, th_open,
 				      &req);
 	}
-
-	/*	if (array) {
-			if (op->or_op == TEST_OP_UPDATE) {
-				insert_recxs(dkey, akey, iod_size, DAOS_TX_NONE,
-					     uf_arg->ua_recxs,
-	   uf_arg->ua_recx_num, buf, buf_size, &req); if (uf_arg->snap == true)
-	   { rc = daos_cont_create_snap( arg->coh, &snap_epoch, NULL, NULL);
-					arg->snap_epoch  = snap_epoch;
-					sn_epoch[op->tx] = snap_epoch;
-				}
-			} else{
-				if (uf_arg->snap == true) {
-					arg->snap_epoch = sn_epoch[op->tx];
-					rc = daos_tx_open_snap(
-					    arg->coh, arg->snap_epoch, &th_open,
-	   NULL); D_ASSERT(rc == 0); lookup_recxs(dkey, akey, iod_size, th_open,
-						     uf_arg->ua_recxs,
-						     uf_arg->ua_recx_num, buf,
-	   buf_size, &req); } else lookup_recxs(dkey, akey, iod_size,
-	   DAOS_TX_NONE, uf_arg->ua_recxs, uf_arg->ua_recx_num, buf, buf_size,
-	   &req);
-				}
-		} else {
-			if (op->or_op == TEST_OP_UPDATE) {
-				insert_single(dkey, akey, 0, buf, buf_size,
-					      DAOS_TX_NONE, &req);
-				if (uf_arg->snap == true) {
-					rc = daos_cont_create_snap(
-					    arg->coh, &snap_epoch, NULL, NULL);
-					arg->snap_epoch  = snap_epoch;
-					sn_epoch[op->tx] = snap_epoch;
-				}
-
-			} else {
-				if (uf_arg->snap == true) {
-					arg->snap_epoch = sn_epoch[op->tx];
-					rc = daos_tx_open_snap(
-					    arg->coh, arg->snap_epoch, &th_open,
-	   NULL); D_ASSERT(rc == 0); lookup_single(dkey, akey, 0, buf, buf_size,
-						      th_open, &req);
-				} else
-					lookup_single(dkey, akey, 0, buf,
-	   buf_size, DAOS_TX_NONE, &req);
-			}
-		}*/
 
 	if (uf_arg->ua_verify)
 		rc = test_buf_verify(
