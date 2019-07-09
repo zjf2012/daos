@@ -21,7 +21,7 @@
 // portions thereof marked with this legend must also reproduce the markings.
 //
 
-package main
+package server
 
 import (
 	"bytes"
@@ -31,11 +31,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pkg/errors"
+
 	"github.com/daos-stack/daos/src/control/common"
 	pb "github.com/daos-stack/daos/src/control/common/proto/mgmt"
 	"github.com/daos-stack/daos/src/control/log"
 	"github.com/daos-stack/go-spdk/spdk"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -336,7 +337,6 @@ func (n *nvmeStorage) Format(i int, results *([]*pb.NvmeControllerResult)) {
 
 	log.Debugf("device format on NVMe controllers completed")
 	n.formatted = true
-	return
 }
 
 // Update attempts to update firmware on NVMe controllers attached to a
@@ -467,7 +467,6 @@ func (n *nvmeStorage) Update(
 	}
 
 	log.Debugf("device fwupdates on specified NVMe controllers completed\n")
-	return
 }
 
 // BurnIn method implementation for nvmeStorage

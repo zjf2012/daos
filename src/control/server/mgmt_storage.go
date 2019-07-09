@@ -21,14 +21,15 @@
 // portions thereof marked with this legend must also reproduce the markings.
 //
 
-package main
+package server
 
 import (
+	"github.com/pkg/errors"
+	"golang.org/x/net/context"
+
 	"github.com/daos-stack/daos/src/control/common"
 	pb "github.com/daos-stack/daos/src/control/common/proto/mgmt"
 	"github.com/daos-stack/daos/src/control/log"
-	"github.com/pkg/errors"
-	"golang.org/x/net/context"
 )
 
 // addState creates, populates and returns ResponseState in addition

@@ -21,17 +21,18 @@
 // portions thereof marked with this legend must also reproduce the markings.
 //
 
-package main
+package server
 
 import (
 	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/pkg/errors"
+
 	. "github.com/daos-stack/daos/src/control/common"
 	pb "github.com/daos-stack/daos/src/control/common/proto/mgmt"
 	. "github.com/daos-stack/go-spdk/spdk"
-	"github.com/pkg/errors"
 )
 
 var nvmeFormatCalls []string // record calls to nvme.Format()
@@ -118,7 +119,7 @@ func (m *mockSpdkNvme) Update(pciAddr string, path string, slot int32) (
 	return m.initCtrlrs, m.initNss, m.updateRet
 }
 
-func (m *mockSpdkNvme) Cleanup() { return }
+func (m *mockSpdkNvme) Cleanup() {}
 
 func newMockSpdkNvme(
 	fwBefore string, fwAfter string, ctrlrs []Controller, nss []Namespace,
@@ -652,7 +653,7 @@ func TestUpdateNvme(t *testing.T) {
 					State: &pb.ResponseState{
 						Status: pb.ResponseStatus_CTRL_ERR_NVME,
 						Error: pciAddr + ": " +
-							"*main.mockSpdkNvme: " +
+							"*server.mockSpdkNvme: " +
 							"spdk format failed",
 					},
 				},
@@ -789,7 +790,6 @@ func TestUpdateNvme(t *testing.T) {
 			t, len(results), len(tt.expResults),
 			"unexpected number of response results, "+tt.desc)
 
-		successPciaddrs := []string{}
 		for i, result := range results {
 			AssertEqual(
 				t, result.State.Error, tt.expResults[i].State.Error,
@@ -800,10 +800,6 @@ func TestUpdateNvme(t *testing.T) {
 			AssertEqual(
 				t, result.Pciaddr, tt.expResults[i].Pciaddr,
 				"unexpected pciaddr, "+tt.desc)
-
-			if result.State.Status == pb.ResponseStatus_CTRL_SUCCESS {
-				successPciaddrs = append(successPciaddrs, result.Pciaddr)
-			}
 		}
 
 		// verify controller details have been updated
