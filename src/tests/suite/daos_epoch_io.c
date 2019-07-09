@@ -170,10 +170,6 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 	int                           rc = 0;
 	extern daos_epoch_t           sn_epoch[];
 	daos_epoch_t                  snap_epoch;
-	daos_anchor_t                 anchor;
-	int                           snap_count_out;
-
-	// printf(" Tx Number = %" PRIu64 "\n", op->or_epoch);
 
 	if (array)
 		D_ASSERT(uf_arg->ua_recxs != NULL && uf_arg->ua_recx_num >= 1);
@@ -194,43 +190,82 @@ static int daos_test_cb_uf(test_arg_t *arg, struct test_op_record *op,
 			      uf_arg->ua_values ? uf_arg->ua_recx_num : 1,
 			      iod_size);
 
-	if (array) {
-		if (op->or_op == TEST_OP_UPDATE)
+	if (op->or_op == TEST_OP_UPDATE) {
+		if (array)
 			insert_recxs(dkey, akey, iod_size, DAOS_TX_NONE,
 				     uf_arg->ua_recxs, uf_arg->ua_recx_num, buf,
 				     buf_size, &req);
 		else
-			lookup_recxs(dkey, akey, iod_size, DAOS_TX_NONE,
-				     uf_arg->ua_recxs, uf_arg->ua_recx_num, buf,
-				     buf_size, &req);
-	} else {
-		if (op->or_op == TEST_OP_UPDATE) {
 			insert_single(dkey, akey, 0, buf, buf_size,
 				      DAOS_TX_NONE, &req);
-			if (uf_arg->snap == true) {
-				rc = daos_cont_create_snap(arg->coh, &snap_epoch, NULL, NULL);
-				arg->snap_epoch  = snap_epoch;
-				sn_epoch[op->tx] = snap_epoch;
-				daos_cont_list_snap(arg->coh, &snap_count_out,
-						    NULL, NULL, &anchor, NULL);
-				//print_message("--------------Number of Snapshot=%d\n", snap_count_out);
-			}
-
-		} else {
-			if (uf_arg->snap == true) {
-				arg->snap_epoch = sn_epoch[op->tx];
-				/*printf("--------------------- In lookup epoch
-				before daos_tx_open_snap = %" PRIu64 "\n", arg->snap_epoch);*/
-				rc = daos_tx_open_snap(
-				    arg->coh, arg->snap_epoch, &th_open, NULL);
-				D_ASSERT(rc == 0);
-				lookup_single(dkey, akey, 0, buf, buf_size,
-					      th_open, &req);
-			}else
-				lookup_single(dkey, akey, 0, buf, buf_size,
-					DAOS_TX_NONE, &req);
+		if (uf_arg->snap == true) {
+			rc = daos_cont_create_snap(arg->coh, &snap_epoch, NULL,
+						   NULL);
+			arg->snap_epoch  = snap_epoch;
+			sn_epoch[op->tx] = snap_epoch;
 		}
+	} else{
+		th_open = DAOS_TX_NONE;
+		if (uf_arg->snap == true) {
+			arg->snap_epoch = sn_epoch[op->tx];
+			rc = daos_tx_open_snap(arg->coh, arg->snap_epoch,
+					       &th_open, NULL);
+			D_ASSERT(rc == 0);
+			}
+		if (array)
+			lookup_recxs(dkey, akey, iod_size, th_open,
+				uf_arg->ua_recxs,
+				uf_arg->ua_recx_num, buf, buf_size,
+				&req);
+		else
+			lookup_single(dkey, akey, 0, buf, buf_size, th_open,
+				      &req);
 	}
+
+	/*	if (array) {
+			if (op->or_op == TEST_OP_UPDATE) {
+				insert_recxs(dkey, akey, iod_size, DAOS_TX_NONE,
+					     uf_arg->ua_recxs,
+	   uf_arg->ua_recx_num, buf, buf_size, &req); if (uf_arg->snap == true)
+	   { rc = daos_cont_create_snap( arg->coh, &snap_epoch, NULL, NULL);
+					arg->snap_epoch  = snap_epoch;
+					sn_epoch[op->tx] = snap_epoch;
+				}
+			} else{
+				if (uf_arg->snap == true) {
+					arg->snap_epoch = sn_epoch[op->tx];
+					rc = daos_tx_open_snap(
+					    arg->coh, arg->snap_epoch, &th_open,
+	   NULL); D_ASSERT(rc == 0); lookup_recxs(dkey, akey, iod_size, th_open,
+						     uf_arg->ua_recxs,
+						     uf_arg->ua_recx_num, buf,
+	   buf_size, &req); } else lookup_recxs(dkey, akey, iod_size,
+	   DAOS_TX_NONE, uf_arg->ua_recxs, uf_arg->ua_recx_num, buf, buf_size,
+	   &req);
+				}
+		} else {
+			if (op->or_op == TEST_OP_UPDATE) {
+				insert_single(dkey, akey, 0, buf, buf_size,
+					      DAOS_TX_NONE, &req);
+				if (uf_arg->snap == true) {
+					rc = daos_cont_create_snap(
+					    arg->coh, &snap_epoch, NULL, NULL);
+					arg->snap_epoch  = snap_epoch;
+					sn_epoch[op->tx] = snap_epoch;
+				}
+
+			} else {
+				if (uf_arg->snap == true) {
+					arg->snap_epoch = sn_epoch[op->tx];
+					rc = daos_tx_open_snap(
+					    arg->coh, arg->snap_epoch, &th_open,
+	   NULL); D_ASSERT(rc == 0); lookup_single(dkey, akey, 0, buf, buf_size,
+						      th_open, &req);
+				} else
+					lookup_single(dkey, akey, 0, buf,
+	   buf_size, DAOS_TX_NONE, &req);
+			}
+		}*/
 
 	if (uf_arg->ua_verify)
 		rc = test_buf_verify(
@@ -364,13 +399,14 @@ static int daos_test_cb_query(test_arg_t *arg, struct test_op_record *op,
 
 	pinfo.pi_bits = DPI_SPACE;
 	rc = daos_pool_query(arg->pool.poh, NULL, &pinfo, NULL, NULL);
-	if (rc != 0){
+	if (rc != 0) {
 		print_message("pool query failed %d\n", rc);
 		return rc;
 	}
 
-	for (i=0;i<=1;i++)
-		print_message("  pool size: Total = %" PRIu64 "  Free= %" PRIu64"",
+	for (i = 0; i <= 1; i++)
+		print_message("  pool size: Total = %" PRIu64 "  Free= %" PRIu64
+			      "",
 			      pinfo.pi_space.ps_space.s_total[i],
 			      pinfo.pi_space.ps_space.s_free[i]);
 	print_message("\n");
@@ -1478,7 +1514,7 @@ int io_conf_run(test_arg_t *arg, const char *io_conf)
 		if (cmd_line_get(fp, cmd_line) != 0)
 			break;
 
-		//print_message("---cmd_line--- %s\n", cmd_line);
+		print_message("---cmd_line--- %s\n", cmd_line);
 		rc = cmd_line_parse(arg, cmd_line, &op);
 
 		if (rc != 0) {

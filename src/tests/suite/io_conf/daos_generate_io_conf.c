@@ -208,12 +208,15 @@ static int update_array_internal(int index, int eph, struct extent *extents,
 		rec_length += length + 1;
 	}
 
-	if (update)
-		sprintf(output_buf, "update --tx %d --recx \"%s\"\n", eph,
+	if (update) {
+		sprintf(output_buf, "update --tx %d --snap --recx \"%s\"\n", eph,
 			rec_buf);
-	else
+		records[index].records[0].snap = true;
+	} else {
 		sprintf(output_buf, "punch --tx %d --recx \"%s\"\n", eph,
 			rec_buf);
+		records[index].records[0].snap = false;
+	}
 
 	return 0;
 }
@@ -299,9 +302,13 @@ static int fetch_array(int index, int eph, struct extent *extents,
 	}
 
 	if (rec_length != 0) {
-		if (record->records[0].type == ARRAY)
-			sprintf(output_buf, "fetch --tx %d -v --recx \"%s\"\n",
+		if (record->records[0].snap == true)
+			sprintf(output_buf, "fetch --tx %d -v --snap --recx \"%s\"\n",
 				record->eph, rec_buf);
+		else
+			sprintf(output_buf, "fetch --tx %d --recx \"%s\"\n",
+				record->eph, rec_buf);
+
 	}
 
 	return 0;
