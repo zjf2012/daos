@@ -461,11 +461,6 @@ int generate_io_conf_rec(int fd, struct current_status *status)
 	for (i = 0; i < epoch_times; i++) {
 		char buffer[512];
 
-		rc = write(fd, line, strlen(line));
-		if (rc <= 0) {
-			rc = -1;
-			goto out;
-		}
 		if (record_type == ARRAY) {
 			op = choose_op(i, MAX_OPS);
 			rc = (*operations[op].op)(i, eph + i, extents,
