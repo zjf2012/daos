@@ -1,5 +1,5 @@
 /**
- * (C) Copyright 2016 Intel Corporation.
+ * (C) Copyright 2016-2019 Intel Corporation.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,7 +53,7 @@ init(void)
 	return 0;
 
 err_cont_cache:
-	ds_cont_iv_fini();
+	ds_cont_cache_fini();
 
 err_oid_iv:
 	ds_oid_iv_fini();
