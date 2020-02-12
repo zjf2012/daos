@@ -48,9 +48,7 @@ class MpioUtils():
 
         try:
             # checking mpich install
-            self.mpichinstall = subprocess.check_output(
-                ["ssh", hostlist[0],
-                 "command -v mpichversion"]).rstrip()[:-len('bin/mpichversion')]
+            self.mpichinstall = "/usr/lib64/openmpi3/"
 
             return True
 
