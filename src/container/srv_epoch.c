@@ -237,6 +237,7 @@ ds_cont_epoch_discard(struct rdb_tx *tx, struct ds_pool_hdl *pool_hdl,
 		DP_CONT(pool_hdl->sph_pool->sp_uuid, in->cei_op.ci_uuid), rpc,
 		DP_UUID(in->cei_op.ci_hdl), in->cei_epoch);
 
+	// TODO: Change this to a Container capas check for READ and WRITE.
 	/* Verify the container handle capabilities. */
 	if (!(hdl->ch_capas & DAOS_COO_RW))
 		D_GOTO(out, rc = -DER_NO_PERM);
@@ -318,6 +319,7 @@ ds_cont_snap_create(struct rdb_tx *tx, struct ds_pool_hdl *pool_hdl,
 		DP_CONT(pool_hdl->sph_pool->sp_uuid, in->cei_op.ci_uuid), rpc,
 		in->cei_epoch);
 
+	// TODO: Change this to a Container capas check for READ and WRITE.
 	/* Verify the container handle capabilities. */
 	if (!(hdl->ch_capas & DAOS_COO_RW)) {
 		rc = -DER_NO_PERM;

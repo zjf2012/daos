@@ -735,6 +735,7 @@ ds_pool_tgt_connect_handler(crt_rpc_t *rpc)
 
 	hdl = ds_pool_hdl_lookup(in->tci_hdl);
 	if (hdl != NULL) {
+		// TODO: Might need translation if stored and requested capas don't line up.
 		if (hdl->sph_capas == in->tci_capas) {
 			D_DEBUG(DF_DSMS, DF_UUID": found compatible pool "
 				"handle: hdl="DF_UUID" capas="DF_U64"\n",
@@ -771,6 +772,7 @@ ds_pool_tgt_connect_handler(crt_rpc_t *rpc)
 	}
 
 	uuid_copy(hdl->sph_uuid, in->tci_hdl);
+	// TODO: Might need translation if stored and passed capas don't line up.
 	hdl->sph_capas = in->tci_capas;
 	hdl->sph_pool = pool;
 

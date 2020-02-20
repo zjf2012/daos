@@ -507,6 +507,7 @@ dc_pool_connect(tse_task_t *task)
 			D_GOTO(out_task, rc = -DER_NOMEM);
 		uuid_copy(pool->dp_pool, args->uuid);
 		uuid_generate(pool->dp_pool_hdl);
+		// TODO: We need to figure out if this is ok or if it needs a translation.
 		pool->dp_capas = args->flags;
 
 		/** attach to the server group and initialize rsvc_client */
@@ -549,6 +550,7 @@ dc_pool_connect(tse_task_t *task)
 
 	uuid_copy(pci->pci_op.pi_uuid, args->uuid);
 	uuid_copy(pci->pci_op.pi_hdl, pool->dp_pool_hdl);
+	// TODO: This should be ok since it will be processed server side.
 	pci->pci_capas = args->flags;
 	pci->pci_query_bits = pool_query_bits(args->info, NULL);
 

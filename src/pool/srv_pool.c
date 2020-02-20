@@ -1919,6 +1919,7 @@ ds_pool_connect_handler(crt_rpc_t *rpc)
 	d_iov_set(&value, &hdl, sizeof(hdl));
 	rc = rdb_tx_lookup(&tx, &svc->ps_handles, &key, &value);
 	if (rc == 0) {
+		// TODO: in->pci_capas will have to be translated most likely.
 		if (hdl.ph_capas == in->pci_capas) {
 			/*
 			 * The handle already exists; only do the pool map
@@ -2015,6 +2016,7 @@ ds_pool_connect_handler(crt_rpc_t *rpc)
 					  NULL /* key_out */, &value);
 			if (rc != 0)
 				D_GOTO(out_map_version, rc);
+			// TODO: Check to see if these line up in the new capas set.
 			if (hdl.ph_capas & DAOS_PC_EX)
 				D_GOTO(out_map_version, rc = -DER_BUSY);
 		}
@@ -2030,6 +2032,7 @@ ds_pool_connect_handler(crt_rpc_t *rpc)
 		D_GOTO(out_map_version, rc);
 	}
 
+	// TODO: Might neeed a translation here.
 	hdl.ph_capas = in->pci_capas;
 	nhandles++;
 
