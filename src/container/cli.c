@@ -243,6 +243,7 @@ dc_cont_create(tse_task_t *task)
 	if (pool == NULL)
 		D_GOTO(err_task, rc = -DER_NO_HDL);
 
+	// TODO: Modify existing check to be against container create pool ACL
 	if (!(pool->dp_capas & DAOS_PC_RW) && !(pool->dp_capas & DAOS_PC_EX))
 		D_GOTO(err_pool, rc = -DER_NO_PERM);
 
@@ -350,6 +351,9 @@ dc_cont_destroy(tse_task_t *task)
 	if (pool == NULL)
 		D_GOTO(err, rc = -DER_NO_HDL);
 
+	// TODO: See if we can get our hands on the container capas if not do a
+	// top level check here against the new container destroy capa in the
+	// pool capas.
 	if (!(pool->dp_capas & DAOS_PC_RW) && !(pool->dp_capas & DAOS_PC_EX))
 		D_GOTO(err_pool, rc = -DER_NO_PERM);
 
@@ -608,6 +612,8 @@ dc_cont_local_open(uuid_t cont_uuid, uuid_t cont_hdl_uuid,
 		D_GOTO(out, rc = -DER_NO_HDL);
 
 	uuid_copy(cont->dc_cont_hdl, cont_hdl_uuid);
+	// TODO: Investigate the use of dc_cont_local_open. This might not be
+	// sufficient in the new system.
 	cont->dc_capas = flags;
 
 	D_RWLOCK_WRLOCK(&pool->dp_co_list_lock);
@@ -656,6 +662,7 @@ dc_cont_open(tse_task_t *task)
 		if (cont == NULL)
 			D_GOTO(err_pool, rc = -DER_NOMEM);
 		uuid_generate(cont->dc_cont_hdl);
+		// TODO: this usage seems ok we're just passing it to the server for connect.
 		cont->dc_capas = args->flags;
 		dc_task_set_priv(task, cont);
 	}
@@ -678,6 +685,7 @@ dc_cont_open(tse_task_t *task)
 	uuid_copy(in->coi_op.ci_pool_hdl, pool->dp_pool_hdl);
 	uuid_copy(in->coi_op.ci_uuid, args->uuid);
 	uuid_copy(in->coi_op.ci_hdl, cont->dc_cont_hdl);
+	// TODO: Also seems ok.
 	in->coi_capas = args->flags;
 	/** Determine which container properties need to be retrieved while
 	 * opening the contianer
@@ -1535,6 +1543,7 @@ swap_co_glob(struct dc_cont_glob *cont_glob)
 	/* skip cont_glob->dcg_pool_hdl (uuid_t) */
 	/* skip cont_glob->dcg_uuid (uuid_t) */
 	/* skip cont_glob->dcg_cont_hdl (uuid_t) */
+	// TODO: Is this swapping network byte order?
 	D_SWAP64S(&cont_glob->dcg_capas);
 }
 
@@ -1577,6 +1586,7 @@ dc_cont_l2g(daos_handle_t coh, d_iov_t *glob)
 	uuid_copy(cont_glob->dcg_pool_hdl, pool->dp_pool_hdl);
 	uuid_copy(cont_glob->dcg_uuid, cont->dc_uuid);
 	uuid_copy(cont_glob->dcg_cont_hdl, cont->dc_cont_hdl);
+	// TODO: This should be ok since capas are already precomputed.
 	cont_glob->dcg_capas = cont->dc_capas;
 	cont_glob->dcg_csum_type = daos_csummer_get_type(cont->dc_csummer);
 	cont_glob->dcg_csum_chunksize =
@@ -1649,6 +1659,10 @@ dc_cont_g2l(daos_handle_t poh, struct dc_cont_glob *cont_glob,
 		D_GOTO(out, rc = -DER_INVAL);
 	}
 
+	// TODO: This seems to restrict opening a container RW if the pool
+	// capabilities are only readonly. This will probably have to be
+	// changed to a check against the container capabilities for
+	// open/read/write. I don't think pool caps matter there anymore.
 	if ((cont_glob->dcg_capas & DAOS_COO_RW) &&
 	    (pool->dp_capas & DAOS_PC_RO))
 		D_GOTO(out_pool, rc = -DER_NO_PERM);

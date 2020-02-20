@@ -547,6 +547,8 @@ cont_create(struct rdb_tx *tx, struct ds_pool_hdl *pool_hdl,
 	D_DEBUG(DF_DSMS, DF_CONT": processing rpc %p\n",
 		DP_CONT(pool_hdl->sph_pool->sp_uuid, in->cci_op.ci_uuid), rpc);
 
+	// TODO: Modify to use new pool create capabilities and
+	// maybe add debug message?
 	/* Verify the pool handle capabilities. */
 	if (!(pool_hdl->sph_capas & DAOS_PC_RW) &&
 	    !(pool_hdl->sph_capas & DAOS_PC_EX))
@@ -687,6 +689,8 @@ cont_destroy(struct rdb_tx *tx, struct ds_pool_hdl *pool_hdl,
 		DP_CONT(pool_hdl->sph_pool->sp_uuid, in->cdi_op.ci_uuid), rpc,
 		in->cdi_force);
 
+	// TODO: Modify to check against container delete pool acl and
+	// container delete container acl.
 	/* Verify the pool handle capabilities. */
 	if (!(pool_hdl->sph_capas & DAOS_PC_RW) &&
 	    !(pool_hdl->sph_capas & DAOS_PC_EX))
@@ -827,6 +831,10 @@ cont_open(struct rdb_tx *tx, struct ds_pool_hdl *pool_hdl, struct cont *cont,
 		DP_CONT(pool_hdl->sph_pool->sp_uuid, in->coi_op.ci_uuid), rpc,
 		DP_UUID(in->coi_op.ci_hdl), in->coi_capas);
 
+	// TODO: Change to ensure read/write on pool matches read write request
+	// and that permissions requested on the container match. Also add debug.
+	// Might need to defer this check since we need to get the container
+	// acl property first.
 	/* Verify the pool handle capabilities. */
 	if ((in->coi_capas & DAOS_COO_RW) &&
 	    !(pool_hdl->sph_capas & DAOS_PC_RW) &&
@@ -854,6 +862,7 @@ cont_open(struct rdb_tx *tx, struct ds_pool_hdl *pool_hdl, struct cont *cont,
 	D_ASSERT(prop != NULL);
 	D_ASSERT(prop->dpp_nr == CONT_PROP_NUM);
 
+	// TODO: Need to make sure force and permission flags dont collide.
 	if (!(in->coi_capas & DAOS_COO_FORCE)) {
 		pmap = pool_hdl->sph_pool->sp_map;
 		rc = cont_verify_redun_req(pmap, prop);
@@ -893,6 +902,8 @@ cont_open(struct rdb_tx *tx, struct ds_pool_hdl *pool_hdl, struct cont *cont,
 
 	uuid_copy(chdl.ch_pool_hdl, pool_hdl->sph_uuid);
 	uuid_copy(chdl.ch_cont, cont->c_uuid);
+	// TODO: Might need this to be a new capabilities set calculated by sec
+	// code.
 	chdl.ch_capas = in->coi_capas;
 
 	rc = ds_cont_epoch_init_hdl(tx, cont, in->coi_op.ci_hdl, &chdl);
@@ -1153,6 +1164,7 @@ cont_prop_read(struct rdb_tx *tx, struct cont *cont, uint64_t bits,
 	uint32_t	 idx = 0, nr = 0;
 	int		 rc = 0;
 
+	// TODO: Check if this is the right place to put a get-prop/get-acl check
 	bitmap = bits & DAOS_CO_QUERY_PROP_ALL;
 	while (idx < DAOS_CO_QUERY_PROP_BITS_NR) {
 		if (bitmap & 0x1)
@@ -1483,6 +1495,9 @@ set_prop(struct rdb_tx *tx, struct ds_pool_hdl *pool_hdl,
 	/*
 	 * Can't modify the container props without RW perms to the container.
 	 * TODO DAOS-2063: Update check when set-prop and set-acl capas added.
+	 *
+	 * Now is the time to do this and also filter for the prop that we're
+	 * trying to set to make the right check.
 	 */
 	if (!(hdl->ch_capas & DAOS_COO_RW))
 		D_GOTO(out, rc = -DER_NO_PERM);

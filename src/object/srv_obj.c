@@ -1044,6 +1044,8 @@ obj_ioc_init(uuid_t pool_uuid, uuid_t coh_uuid, uuid_t cont_uuid, int opc,
 		return rc;
 	}
 
+	// TODO: Modify this check to be against the container write property.
+	// Also try to figure out where we check against container read.
 	if (obj_is_modification_opc(opc) && !(coh->sch_capas & DAOS_COO_RW)) {
 		D_ERROR("cont "DF_UUID" hdl "DF_UUID" sch_capas "DF_U64", "
 			"NO_PERM to update.\n", DP_UUID(cont_uuid),
