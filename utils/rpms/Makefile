@@ -6,6 +6,7 @@ SOURCE   = $(NAME)-$(VERSION).tar.$(SRC_EXT)
 MOCK_OPTIONS := --disablerepo=sclo*
 
 PR_REPOS := $(shell set -x; git show -s --format=%B | sed -ne 's/^PR-repos: *\(.*\)/\1/p')
+override LEAP_15_PR_REPOS += lua-lmod@PR-1
 
 GIT_SHORT       := $(shell git rev-parse --short HEAD)
 GIT_NUM_COMMITS := $(shell git rev-list HEAD --count)

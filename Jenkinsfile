@@ -13,6 +13,7 @@
 // To use a test branch (i.e. PR) until it lands to master
 // I.e. for testing library changes
 //@Library(value="pipeline-lib@your_branch") _
+@Library(value="pipeline-lib@bmurrell/leap15") _
 
 def doc_only_change() {
     if (cachedCommitPragma(pragma: 'Doc-only') == 'true') {
@@ -69,6 +70,10 @@ def el7_daos_repos() {
     return el7_component_repos + ' ' + component_repos() + ' ' + daos_repo()
 }
 
+def leap15_daos_repos() {
+    return leap15_component_repos + ' ' + component_repos() + ' ' + daos_repo()
+}
+
 commit_pragma_cache = [:]
 def cachedCommitPragma(Map config) {
 
@@ -87,7 +92,13 @@ def daos_packages_version(String distro) {
     // TODO: this should actually be determined from the PR-repos artifacts
     def version = cachedCommitPragma(pragma: 'RPM-test-version')
     if (version != "") {
-        return version
+        String dist
+        if (distro == "centos7") {
+            dist = "el7"
+        } else if (distro == "leap15") {
+            dist = "suse.lp151"
+        }
+        return version + "." + dist
     }
 
     // use the stash after that
@@ -112,16 +123,42 @@ def parallel_build() {
     return false
 }
 
+def update_kernel(int num_nodes) {
+    def node_list = env.NODELIST.split(',')[0..num_nodes - 1].join(',')
+    sh label: "Update kernel to Leap 15.2 release on " + node_list,
+       script: 'if ! clush -B -S -o "-i ci_key" -l root -w ' + node_list + ' ' +
+             '''"set -ex
+                 zypper --non-interactive ar http://download.opensuse.org/distribution/leap/15.2/repo/oss/ 15.2_oss
+                 zypper --non-interactive --gpg-auto-import-keys ref 15.2_oss 
+                 zypper --non-interactive lr
+                 zypper --non-interactive search -s kernel-default
+                 zypper --non-interactive up kernel-default
+                 zypper --non-interactive rr 15.2_oss
+                 rpm -qa | grep kernel
+                 sync; sync; init 6"; then
+                    echo "kernel install and reboot exited ${PIPESTATUS[0]}"
+                fi'''
+    waitForNodeReadySystem NODELIST: node_list, ready_command: "hostname"
+    sh label: "Verify kernel releases",
+       script: 'clush -B -S -o "-i ci_key" -l root -w ' + node_list + ' ' +
+               '"set -ex; uname -a"'
+}
+
 target_branch = env.CHANGE_TARGET ? env.CHANGE_TARGET : env.BRANCH_NAME
 def arch = ""
 def sanitized_JOB_NAME = JOB_NAME.toLowerCase().replaceAll('/', '-').replaceAll('%2f', '-')
 
 def qb_inst_rpms = ""
 el7_component_repos = ""
-def functional_rpms  = "--exclude openmpi openmpi3 hwloc ndctl " +
-                       "ior-hpc-cart-4-daos-0 mpich-autoload-cart-4-daos-0 " +
-                       "romio-tests-cart-4-daos-0 hdf5-tests-cart-4-daos-0 " +
-                       "mpi4py-tests-cart-4-daos-0 testmpio-cart-4-daos-0 fio"
+leap15_component_repos = ""
+def functional_rpms = "openmpi3 hwloc ndctl " +
+                      "ior-hpc-cart-4-daos-0 " +
+                      "romio-tests-cart-4-daos-0 hdf5-tests-cart-4-daos-0 " +
+                      "testmpio-cart-4-daos-0 fio"
+// need to exclude openmpi until we remove it from the repo
+def el7_functional_rpms  = "--exclude openmpi " + functional_rpms + " mpi4py-tests-cart-4-daos-0"
+def leap15_functional_rpms  = functional_rpms + ' lua-lmod mpich-3.3-5'
+
 
 def rpm_test_pre = '''if git show -s --format=%B | grep "^Skip-test: true"; then
                           exit 0
@@ -156,7 +193,7 @@ def rpm_test_daos_test = '''me=\\\$(whoami)
                             trap 'set -x; kill -INT \\\$COPROC_PID' EXIT
                             line=\"\"
                             while [[ \"\\\$line\" != *started\\\\ on\\\\ rank\\\\ 0* ]]; do
-                                read line <&\\\${COPROC[0]}
+                                read -t 60 line <&\\\${COPROC[0]}
                                 echo \"Server stdout: \\\$line\"
                             done
                             echo \"Server started!\"
@@ -225,7 +262,6 @@ def rpm_scan_post = '''rm -f ${WORKSPACE}/maldetect.xml
                        scp -i ci_key \
                          jenkins@${nodelist[0]}:/var/tmp/maldetect.xml \
                          ${WORKSPACE}/maldetect.xml'''
-
 
 // bail out of branch builds that are not on a whitelist
 if (!env.CHANGE_ID &&
@@ -301,10 +337,10 @@ pipeline {
         BUILDARGS = docker_build_args()
         BUILDARGS_QB_CHECK = docker_build_args(qb: quickbuild())
         BUILDARGS_QB_TRUE = docker_build_args(qb: true)
-        QUICKBUILD_DEPS = sh label: 'Get Quickbuild dependencies',
-                             script: 'rpmspec -q --srpm --requires' +
-                                     ' utils/rpms/daos.spec 2>/dev/null',
-                             returnStdout: true
+        QUICKBUILD_DEPS_EL7 = sh(script: "rpmspec -q --define dist\\ .el7 --undefine suse_version --define rhel\\ 7 --srpm --requires utils/rpms/daos.spec 2>/dev/null",
+                                 returnStdout: true)
+        QUICKBUILD_DEPS_LEAP15 = sh(script: "rpmspec -q --define dist\\ .suse.lp151 --undefine rhel --define suse_version\\ 1501 --srpm --requires utils/rpms/daos.spec 2>/dev/null",
+                                    returnStdout: true)
         TEST_RPMS = cachedCommitPragma(pragma: 'RPM-test', def_val: 'false')
     }
 
@@ -319,107 +355,6 @@ pipeline {
             when { changeRequest() }
             steps {
                 cancelPreviousBuilds()
-            }
-        }
-        stage('Pre-build') {
-            when {
-                beforeAgent true
-                allOf {
-                    not { branch 'weekly-testing' }
-                    not { environment name: 'CHANGE_TARGET', value: 'weekly-testing' }
-                }
-            }
-            parallel {
-                stage('checkpatch') {
-                    when {
-                        beforeAgent true
-                        allOf {
-                            expression { ! skip_stage('checkpatch') }
-                            expression { ! doc_only_change() }
-                        }
-                    }
-                    agent {
-                        dockerfile {
-                            filename 'Dockerfile.centos.7'
-                            dir 'utils/docker'
-                            label 'docker_runner'
-                            additionalBuildArgs '$BUILDARGS' +
-                                           "-t ${sanitized_JOB_NAME}-centos7 "
-                        }
-                    }
-                    steps {
-                        checkPatch user: GITHUB_USER_USR,
-                                   password: GITHUB_USER_PSW,
-                                   ignored_files: "src/control/vendor/*:src/include/daos/*.pb-c.h:src/common/*.pb-c.[ch]:src/mgmt/*.pb-c.[ch]:src/iosrv/*.pb-c.[ch]:src/security/*.pb-c.[ch]:*.crt:*.pem:*_test.go:src/cart/_structures_from_macros_.h"
-                    }
-                    post {
-                        always {
-                            archiveArtifacts artifacts: 'pylint.log', allowEmptyArchive: true
-                            /* when JENKINS-39203 is resolved, can probably use stepResult
-                               here and remove the remaining post conditions
-                               stepResult name: env.STAGE_NAME,
-                                          context: 'build/' + env.STAGE_NAME,
-                                          result: ${currentBuild.currentResult}
-                            */
-                        }
-                        /* temporarily moved into stepResult due to JENKINS-39203
-                        success {
-                            githubNotify credentialsId: 'daos-jenkins-commit-status',
-                                         description: env.STAGE_NAME,
-                                         context: 'pre-build/' + env.STAGE_NAME,
-                                         status: 'SUCCESS'
-                        }
-                        unstable {
-                            githubNotify credentialsId: 'daos-jenkins-commit-status',
-                                         description: env.STAGE_NAME,
-                                         context: 'pre-build/' + env.STAGE_NAME,
-                                         status: 'FAILURE'
-                        }
-                        failure {
-                            githubNotify credentialsId: 'daos-jenkins-commit-status',
-                                         description: env.STAGE_NAME,
-                                         context: 'pre-build/' + env.STAGE_NAME,
-                                         status: 'ERROR'
-                        }
-                        */
-                    }
-                } // stage('checkpatch')
-                stage('Python Bandit check') {
-                    when {
-                      beforeAgent true
-                      expression {
-                          cachedCommitPragma(pragma: 'Skip-python-bandit',
-                                       def_val: 'true') != 'true'
-                      }
-                    }
-                    agent {
-                        dockerfile {
-                            filename 'Dockerfile.code_scanning'
-                            dir 'utils/docker'
-                            label 'docker_runner'
-                            additionalBuildArgs '$BUILDARGS'
-                        }
-                    }
-                    steps {
-                        githubNotify credentialsId: 'daos-jenkins-commit-status',
-                                     description: env.STAGE_NAME,
-                                     context: "build" + "/" + env.STAGE_NAME,
-                                     status: "PENDING"
-                        checkoutScm withSubmodules: true
-                        catchError(stageResult: 'UNSTABLE', buildResult: 'SUCCESS') {
-                            runTest script: '''bandit --format xml -o bandit.xml \
-                                                      -r $(git ls-tree --name-only HEAD) \
-                                                      -c src/tests/ftest/security/bandit.config''',
-                                    junit_files: "bandit.xml",
-                                    ignore_failure: true
-                        }
-                    }
-                    post {
-                        always {
-                            junit 'bandit.xml'
-                        }
-                    }
-                } // stage('Python Bandit check')
             }
         }
         stage('Build') {
@@ -488,7 +423,9 @@ pipeline {
                         }
                         unsuccessful {
                             sh label: "Build Log",
-                               script: 'ci/rpm_build_unsuccessful.sh'
+                               script: 'ARCH=${arch} ci/rpm_build_unsuccessful.sh'
+                            archiveArtifacts artifacts: 'config.log-centos7-rpm',
+                                             allowEmptyArchive: true
                         }
                         cleanup {
                             archiveArtifacts artifacts: 'artifacts/centos7/**'
@@ -550,7 +487,9 @@ pipeline {
                         }
                         unsuccessful {
                             sh label: "Build Log",
-                               script: 'ci/rpm_build_unsuccessful.sh'
+                               script: 'ARCH=${arch} ci/rpm_build_unsuccessful.sh'
+                            archiveArtifacts artifacts: 'config.log-leap15-rpm',
+                                             allowEmptyArchive: true
                         }
                         cleanup {
                             archiveArtifacts artifacts: 'artifacts/leap15/**'
@@ -566,7 +505,7 @@ pipeline {
                             additionalBuildArgs "-t ${sanitized_JOB_NAME}-centos7 " +
                                 '$BUILDARGS_QB_CHECK' +
                                 ' --build-arg QUICKBUILD_DEPS="' +
-                                  env.QUICKBUILD_DEPS + '"' +
+                                  env.QUICKBUILD_DEPS_EL7 + '"' +
                                 ' --build-arg REPOS="' + component_repos() + '"'
                         }
                     }
@@ -731,6 +670,7 @@ pipeline {
                     when {
                         beforeAgent true
                         allOf {
+                            expression { false }  // disable until we get lmod figured out
                             not { branch 'weekly-testing' }
                             not { environment name: 'CHANGE_TARGET', value: 'weekly-testing' }
                             expression { ! quickbuild() }
@@ -774,26 +714,59 @@ pipeline {
                     }
                 }
                 stage('Build on Leap 15') {
-                    when {
-                        beforeAgent true
-                        allOf {
-                            branch target_branch
-                            expression { ! quickbuild() }
-                        }
-                    }
                     agent {
                         dockerfile {
                             filename 'Dockerfile.leap.15'
                             dir 'utils/docker'
                             label 'docker_runner'
                             additionalBuildArgs "-t ${sanitized_JOB_NAME}-leap15 " +
-                                                 '$BUILDARGS'
+                                '$BUILDARGS_QB_CHECK' +
+                                ' --build-arg QUICKBUILD_DEPS="' +
+                                  env.QUICKBUILD_DEPS_LEAP15 + '"' +
+                                ' --build-arg REPOS="' + component_repos() + '"'
                         }
                     }
                     steps {
                         sconsBuild clean: "_build.external${arch}",
                                    parallel_build: parallel_build(),
                                    failure_artifacts: 'config.log-leap15-gcc'
+                        stash name: 'leap15-gcc-install',
+                              includes: 'install/**'
+                        stash name: 'leap15-gcc-build-vars',
+                              includes: ".build_vars${arch}.*"
+                        stash name: 'leap15-gcc-tests',
+                                    includes: '''build/*/*/src/cart/src/utest/test_linkage,
+                                                 build/*/*/src/cart/src/utest/test_gurt,
+                                                 build/*/*/src/cart/src/utest/utest_hlc,
+                                                 build/*/*/src/cart/src/utest/utest_swim,
+                                                 build/*/*/src/rdb/raft/src/tests_main,
+                                                 build/*/*/src/common/tests/btree_direct,
+                                                 build/*/*/src/common/tests/btree,
+                                                 build/*/*/src/common/tests/sched,
+                                                 build/*/*/src/common/tests/drpc_tests,
+                                                 build/*/*/src/common/tests/acl_api_tests,
+                                                 build/*/*/src/common/tests/acl_valid_tests,
+                                                 build/*/*/src/common/tests/acl_util_tests,
+                                                 build/*/*/src/common/tests/acl_principal_tests,
+                                                 build/*/*/src/common/tests/acl_real_tests,
+                                                 build/*/*/src/common/tests/prop_tests,
+                                                 build/*/*/src/iosrv/tests/drpc_progress_tests,
+                                                 build/*/*/src/control/src/github.com/daos-stack/daos/src/control/mgmt,
+                                                 build/*/*/src/client/api/tests/eq_tests,
+                                                 build/*/*/src/iosrv/tests/drpc_handler_tests,
+                                                 build/*/*/src/iosrv/tests/drpc_listener_tests,
+                                                 build/*/*/src/mgmt/tests/srv_drpc_tests,
+                                                 build/*/*/src/security/tests/cli_security_tests,
+                                                 build/*/*/src/security/tests/srv_acl_tests,
+                                                 build/*/*/src/vos/vea/tests/vea_ut,
+                                                 build/*/*/src/common/tests/umem_test,
+                                                 build/*/*/src/bio/smd/tests/smd_ut,
+                                                 scons_local/build_info/**,
+                                                 src/common/tests/btree.sh,
+                                                 src/control/run_go_tests.sh,
+                                                 src/rdb/raft_tests/raft_tests.py,
+                                                 src/vos/tests/evt_ctl.sh
+                                                 src/control/lib/netdetect/netdetect.go'''
                     }
                     post {
                         always {
@@ -1096,7 +1069,7 @@ pipeline {
                                        snapshot: true,
                                        inst_repos: el7_daos_repos(),
                                        inst_rpms: get_daos_packages('centos7') + ' ' +
-                                                  functional_rpms
+                                                  el7_functional_rpms
                         runTestFunctional stashes: [ 'centos7-gcc-install',
                                                      'centos7-gcc-build-vars' ],
                                           test_rpms: env.TEST_RPMS,
@@ -1113,6 +1086,40 @@ pipeline {
                         }
                     }
                 }
+                stage('Functional on Leap 15') {
+                    when {
+                        beforeAgent true
+                        expression { ! skip_stage('func-test-leap15') }
+                    }
+                    agent {
+                        label 'stage_vm9'
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                                       node_count: 9,
+                                       profile: 'daos_ci',
+                                       distro: 'opensuse15',
+                                       snapshot: true,
+                                       inst_repos: leap15_daos_repos(),
+                                       inst_rpms: get_daos_packages('leap15') + ' ' +
+                                                  leap15_functional_rpms
+                        update_kernel(9)
+                        runTestFunctional stashes: [ 'leap15-gcc-install',
+                                                     'leap15-gcc-build-vars' ],
+                                          test_rpms: env.TEST_RPMS,
+                                          pragma_suffix: '',
+                                          test_tag: 'pr,-hw',
+                                          node_count: 9,
+                                          ftest_arg: ''
+                    }
+                    post {
+                        always {
+                            functional_post_always()
+                            archiveArtifacts artifacts: 'Functional/**'
+                            junit 'Functional/*/results.xml, install/lib/daos/TESTING/ftest/*_results.xml'
+                        }
+                    } // post
+                } // stage('Functional on Leap 15')
                 stage('Functional_Hardware_Small') {
                     when {
                         beforeAgent true
@@ -1130,12 +1137,12 @@ pipeline {
                         provisionNodes NODELIST: env.NODELIST,
                                        node_count: 3,
                                        profile: 'daos_ci',
-                                       distro: 'el7',
-                                       inst_repos: el7_daos_repos(),
-                                       inst_rpms: get_daos_packages('centos7') +
-                                                   ' ' + functional_rpms
-                        runTestFunctional stashes: [ 'centos7-gcc-install',
-                                                     'centos7-gcc-build-vars' ],
+                                       distro: 'opensuse15',
+                                       inst_repos: leap15_daos_repos(),
+                                       inst_rpms: get_daos_packages('leap15') + ' ' +
+                                                   leap15_functional_rpms
+                        runTestFunctional stashes: [ 'leap15-gcc-install',
+                                                     'leap15-gcc-build-vars' ],
                                           test_rpms: env.TEST_RPMS,
                                           pragma_suffix: '-hw-small',
                                           test_tag: 'pr,hw,small',
@@ -1149,7 +1156,7 @@ pipeline {
                             junit 'Functional/*/results.xml, install/lib/daos/TESTING/ftest/*_results.xml'
                         }
                     }
-                }
+                } // stage('Functional_Hardware_Small')
                 stage('Functional_Hardware_Medium') {
                     when {
                         beforeAgent true
@@ -1167,12 +1174,13 @@ pipeline {
                         provisionNodes NODELIST: env.NODELIST,
                                        node_count: 5,
                                        profile: 'daos_ci',
-                                       distro: 'el7',
-                                       inst_repos: el7_daos_repos(),
-                                       inst_rpms: get_daos_packages('centos7') + ' ' +
-                                                  functional_rpms
-                        runTestFunctional stashes: [ 'centos7-gcc-install',
-                                                     'centos7-gcc-build-vars' ],
+                                       distro: 'opensuse15',
+                                       inst_repos: leap15_daos_repos(),
+                                       inst_rpms: get_daos_packages('leap15') + ' ' +
+                                                  leap15_functional_rpms
+                        update_kernel(5)
+                        runTestFunctional stashes: [ 'leap15-gcc-install',
+                                                     'leap15-gcc-build-vars' ],
                                           test_rpms: env.TEST_RPMS,
                                           pragma_suffix: '-hw-medium',
                                           test_tag: 'pr,hw,medium,ib2',
@@ -1186,8 +1194,8 @@ pipeline {
                             junit 'Functional/*/results.xml, install/lib/daos/TESTING/ftest/*_results.xml'
                         }
                     }
-                }
-                stage('Functional_Hardware_Large') {
+                } // stage('Functional_Hardware_Medium')
+                stage('Functional_Hardware_Large EL7') {
                     when {
                         beforeAgent true
                         allOf {
@@ -1207,7 +1215,7 @@ pipeline {
                                        distro: 'el7',
                                        inst_repos: el7_daos_repos(),
                                        inst_rpms: get_daos_packages('centos7') + ' ' +
-                                                  functional_rpms
+                                                  el7_functional_rpms
                         runTestFunctional stashes: [ 'centos7-gcc-install',
                                                      'centos7-gcc-build-vars' ],
                                           test_rpms: env.TEST_RPMS,
@@ -1223,7 +1231,44 @@ pipeline {
                             junit 'Functional/*/results.xml, install/lib/daos/TESTING/ftest/*_results.xml'
                         }
                     }
-                }
+                } // stage('Functional_Hardware_Large EL7')
+                stage('Functional_Hardware_Large Leap15') {
+                    when {
+                        beforeAgent true
+                        allOf {
+                            not { environment name: 'DAOS_STACK_CI_HARDWARE_SKIP', value: 'true' }
+                            expression { ! skip_stage('func-hw-test') }
+                            expression { ! skip_stage('func-hw-test-large-leap15') }
+                        }
+                    }
+                    agent {
+                        // 8+ node cluster with 1 IB/node + 1 test control node
+                        label 'ci_nvme9'
+                    }
+                    steps {
+                        provisionNodes NODELIST: env.NODELIST,
+                                       node_count: 9,
+                                       profile: 'daos_ci',
+                                       distro: 'opensuse15',
+                                       inst_repos: leap15_daos_repos(),
+                                       inst_rpms: get_daos_packages('leap15') + ' ' +
+                                                  leap15_functional_rpms
+                        update_kernel(9)
+                        runTestFunctional stashes: [ 'leap15-gcc-install', 'leap15-gcc-build-vars' ],
+                                          test_rpms: env.TEST_RPMS,
+                                          pragma_suffix: '-hw-large',
+                                          test_tag: 'pr,hw,large',
+                                          node_count: 9,
+                                          ftest_arg: '"auto:Optane"'
+                    }
+                    post {
+                        always {
+                            functional_post_always()
+                            archiveArtifacts artifacts: 'Functional/**'
+                            junit 'Functional/*/results.xml, install/lib/daos/TESTING/ftest/*_results.xml'
+                        }
+                    }
+                } // stage('Functional_Hardware_Large Leap15')
                 stage('Test CentOS 7 RPMs') {
                     when {
                         beforeAgent true
@@ -1245,10 +1290,10 @@ pipeline {
                                        inst_repos: el7_daos_repos(),
                                        inst_rpms: 'environment-modules'
                         runTest script: "${rpm_test_pre}" +
-                                        "sudo yum -y install daos{,-client}-${daos_packages_version("centos7")}\n" +
+                                        "sudo yum -y install --exclude ompi daos{,-client}-${daos_packages_version("centos7")}\n" +
                                         "sudo yum -y history rollback last-1\n" +
-                                        "sudo yum -y install daos{,-{server,client}}-${daos_packages_version('centos7')}\n" +
-                                        "sudo yum -y install daos{,-tests}-${daos_packages_version("centos7")}\n" +
+                                        "sudo yum -y install --exclude ompi daos{,-{server,client}}-${daos_packages_version('centos7')}\n" +
+                                        "sudo yum -y install --exclude ompi daos{,-tests}-${daos_packages_version("centos7")}\n" +
                                         "${rpm_test_daos_test}" + '"',
                                 junit_files: null,
                                 failure_artifacts: env.STAGE_NAME, ignore_failure: true
@@ -1290,12 +1335,12 @@ pipeline {
                         }
                     }
                 } // stage('Scan CentOS 7 RPMs')
-            }
-        }
-    }
+            } // parallel
+        } // stage('Test')
+    } // stages
     post {
         unsuccessful {
             notifyBrokenBranch branches: target_branch
         }
-    }
+    } // post
 }

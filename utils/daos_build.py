@@ -105,5 +105,5 @@ def configure_mpi(prereqs, env, libs, required=None):
             print("%s is installed" % mpi)
             return comp
         print("No %s installed and/or loaded" % mpi)
-    print("No OMPI installed")
+    print("No MPI installed")
     return None

@@ -24,3 +24,7 @@ fi
 (if cd "$mockroot/result/"; then
   cp -r . "$artdir"
 fi)
+
+if ls $mockroot/root/builddir/build/BUILD/daos-*/config"${ARCH}".log; then
+    mv $mockroot/root/builddir/build/BUILD/daos-*/config"${ARCH}".log config.log-centos7-rpm
+fi
