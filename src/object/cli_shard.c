@@ -969,7 +969,7 @@ dc_obj_shard_list(struct dc_obj_shard *obj_shard, enum obj_rpc_opc opc,
 	crt_req_addref(req);
 	enum_args.rpc = req;
 	enum_args.hdlp = (daos_handle_t *)pool;
-	enum_args.eaa_nr = obj_args->nr;
+	enum_args.eaa_nr = args->la_recxs_nrp;
 	enum_args.eaa_kds = kds;
 	enum_args.eaa_anchor = obj_args->anchor;
 	enum_args.eaa_dkey_anchor = obj_args->dkey_anchor;
@@ -978,7 +978,7 @@ dc_obj_shard_list(struct dc_obj_shard *obj_shard, enum obj_rpc_opc opc,
 	enum_args.eaa_size = obj_args->size;
 	enum_args.eaa_sgl = sgl;
 	enum_args.eaa_map_ver = &args->la_auxi.map_ver;
-	enum_args.eaa_recxs = obj_args->recxs;
+	enum_args.eaa_recxs = args->la_recxs;
 	rc = tse_task_register_comp_cb(task, dc_enumerate_cb, &enum_args,
 				       sizeof(enum_args));
 	if (rc != 0)

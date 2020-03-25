@@ -56,7 +56,7 @@ fill_recxs(daos_handle_t ih, vos_iter_entry_t *key_ent,
 		return -DER_INVAL;
 	}
 
-	D_DEBUG(DB_IO, "Pack recxs_eprs "DF_U64"/"DF_U64" recxs_len %d size "
+	D_DEBUG(DB_IO, "Pack recxs "DF_U64"/"DF_U64" recxs_len %d size "
 		DF_U64"\n", key_ent->ie_recx.rx_idx, key_ent->ie_recx.rx_nr,
 		arg->recxs_len, arg->rsize);
 

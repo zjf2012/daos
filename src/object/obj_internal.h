@@ -279,6 +279,10 @@ struct shard_punch_args {
 struct shard_list_args {
 	struct shard_auxi_args	 la_auxi;
 	daos_obj_list_t		*la_api_args;
+	daos_recx_t		*la_recxs;
+	uint32_t		*la_recxs_nrp;
+	uint32_t		la_recxs_nr;
+	daos_anchor_t		la_anchor;
 };
 
 struct ec_bulk_spec {

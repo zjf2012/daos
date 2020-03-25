@@ -1043,10 +1043,15 @@ recx_iter_prepare(struct vos_obj_iter *oiter, daos_key_t *dkey,
 static int
 recx_iter_probe(struct vos_obj_iter *oiter, daos_anchor_t *anchor)
 {
+	struct evt_rect *rect;
 	int	opc;
 	int	rc;
 
 	opc = anchor ? EVT_ITER_FIND : EVT_ITER_FIRST;
+	rect = (struct evt_rect *)&anchor->da_buf[0];
+	if (anchor && anchor->da_type != DAOS_ANCHOR_TYPE_EOF &&
+	    anchor->da_type != DAOS_ANCHOR_TYPE_ZERO)
+		rect->rc_ex.ex_hi = anchor->da_offset;
 	rc = evt_iter_probe(oiter->it_hdl, opc, NULL, anchor);
 	return rc;
 }
