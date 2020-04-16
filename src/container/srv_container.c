@@ -1133,41 +1133,25 @@ static int
 cont_close_bcast(crt_context_t ctx, struct cont_svc *svc,
 		 struct cont_tgt_close_rec recs[], int nrecs)
 {
-	struct cont_tgt_close_in       *in;
-	struct cont_tgt_close_out      *out;
-	crt_rpc_t		       *rpc;
-	int				rc;
+	int	i;
+	int	rc;
 
 	D_DEBUG(DF_DSMS, DF_CONT": bcasting: recs[0].hdl="DF_UUID
 		" recs[0].hce="DF_U64" nrecs=%d\n",
 		DP_CONT(svc->cs_pool_uuid, NULL), DP_UUID(recs[0].tcr_hdl),
 		recs[0].tcr_hce, nrecs);
 
-	rc = ds_cont_bcast_create(ctx, svc, CONT_TGT_CLOSE, &rpc);
-	if (rc != 0)
-		D_GOTO(out, rc);
-
-	in = crt_req_get(rpc);
-	in->tci_recs.ca_arrays = recs;
-	in->tci_recs.ca_count = nrecs;
-	uuid_copy(in->tci_pool_uuid, svc->cs_pool_uuid);
-
-	rc = dss_rpc_send(rpc);
-	if (rc == 0 && DAOS_FAIL_CHECK(DAOS_CONT_CLOSE_FAIL_CORPC))
-		rc = -DER_TIMEDOUT;
-	if (rc != 0)
-		D_GOTO(out_rpc, rc);
-
-	out = crt_reply_get(rpc);
-	rc = out->tco_rc;
-	if (rc != 0) {
-		D_ERROR(DF_CONT": failed to close %d targets\n",
-			DP_CONT(svc->cs_pool_uuid, NULL), rc);
-		rc = -DER_IO;
+	/* update container capa to IV */
+	for (i = 0; i < nrecs; i++) {
+		rc = cont_iv_capability_invalidate(
+				svc->cs_pool->sp_iv_ns,
+			        recs[i].tcr_hdl, CRT_IV_SYNC_EAGER);
+		if (rc)
+			D_GOTO(out, rc);
 	}
 
-out_rpc:
-	crt_req_decref(rpc);
+	if (DAOS_FAIL_CHECK(DAOS_CONT_CLOSE_FAIL_CORPC))
+		rc = -DER_TIMEDOUT;
 out:
 	D_DEBUG(DF_DSMS, DF_CONT": bcasted: hdls[0]="DF_UUID" nhdls=%d: %d\n",
 		DP_CONT(svc->cs_pool_uuid, NULL), DP_UUID(recs[0].tcr_hdl),
