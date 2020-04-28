@@ -91,6 +91,9 @@ bool			ts_rebuild_only_iteration = false;
 bool			ts_rebuild_no_update = false;
 /* test inside ULT */
 bool			ts_in_ult = false;
+bool			ts_profile_vos = false;
+char			*ts_profile_vos_path = ".";
+int			ts_profile_vos_avg = 100;
 static ABT_xstream	abt_xstream;
 
 int
@@ -991,7 +994,9 @@ The options are as follows:\n\
 -w	Pause after initialization for attaching debugger or analysis\n\
 	tool.\n\
 \n\
--x	run vos perf test in a ABT ult mode.\n");
+-x	run vos perf test in a ABT ult mode.\n\
+\n\
+-p	run vos perf with profile.\n");
 }
 
 static struct option ts_ops[] = {
@@ -1120,7 +1125,7 @@ main(int argc, char **argv)
 
 	memset(ts_pmem_file, 0, sizeof(ts_pmem_file));
 	while ((rc = getopt_long(argc, argv,
-				 "P:N:T:C:c:o:d:a:r:nASG:s:ztf:hUFRBvIiuwx",
+				 "P:N:T:C:c:o:d:a:r:nASG:s:ztf:hUFRBvIiuwxp",
 				 ts_ops, NULL)) != -1) {
 		char	*endp;
 
@@ -1264,6 +1269,9 @@ main(int argc, char **argv)
 		case 'x':
 			ts_in_ult = true;
 			break;
+		case 'p':
+			ts_profile_vos = true;
+			break;
 		case 'h':
 			if (ts_ctx.tsc_mpi_rank == 0)
 				ts_print_usage();
@@ -1350,8 +1358,8 @@ main(int argc, char **argv)
 				return rc;
 		}
 	} else {
-		if (ts_in_ult) {
-			fprintf(stderr, "ult is only supported for VOS mode\n");
+		if (ts_in_ult || ts_profile_vos) {
+			fprintf(stderr, "ult/prof only supported VOS mode\n");
 			if (ts_ctx.tsc_mpi_rank == 0)
 				ts_print_usage();
 			return -1;
@@ -1433,6 +1441,8 @@ main(int argc, char **argv)
 		fprintf(stdout, "Started...\n");
 	}
 
+	if (ts_profile_vos)
+		vos_profile_start(ts_profile_vos_path, ts_profile_vos_avg);
 	MPI_Barrier(MPI_COMM_WORLD);
 
 	for (i = 0; i < TEST_SIZE; i++) {
@@ -1466,6 +1476,8 @@ main(int argc, char **argv)
 	if (ts_in_ult)
 		ts_abt_fini();
 
+	if (ts_profile_vos)
+		vos_profile_stop();
 	dts_ctx_fini(&ts_ctx);
 	MPI_Finalize();
 	free(ts_ohs);
