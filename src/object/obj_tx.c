@@ -876,6 +876,21 @@ out_tx:
 }
 
 static int
+dc_tx_query_key(struct dc_tx *tx, uint64_t flags,
+		daos_key_t *dkey, daos_key_t *akey)
+{
+	tse_task_t	*task;
+	int		 rc;
+
+	rc = dc_obj_query_key_task_create(tx->tx_coh, dc_tx_ptr2hdl(tx), flags,
+					  dkey, akey, NULL, NULL, NULL, &task);
+	if (rc == 0)
+		rc = dc_task_schedule(task, true);
+
+	return rc;
+}
+
+static int
 dc_tx_add_update(struct dc_tx *tx, daos_handle_t oh, uint64_t flags,
 		 daos_key_t *dkey, unsigned int nr, daos_iod_t *iods,
 		 d_sg_list_t *sgls)
@@ -883,6 +898,39 @@ dc_tx_add_update(struct dc_tx *tx, daos_handle_t oh, uint64_t flags,
 	struct dc_tx_sub_req	*dtsr;
 	int			 rc = 0;
 	int			 i;
+
+	if (flags & (DAOS_COND_DKEY_INSERT | DAOS_COND_DKEY_UPDATE)) {
+		rc = dc_tx_query_key(tx, DAOS_GET_DKEY, dkey, NULL);
+		if (flags & DAOS_COND_DKEY_INSERT) {
+			if (rc == 0)
+				return -DER_EXIST;
+
+			if (rc != -DER_NONEXIST)
+				return rc;
+
+			rc = 0;
+		} else if (rc != 0) {
+			return rc;
+		}
+	}
+
+	if (flags & (DAOS_COND_AKEY_INSERT | DAOS_COND_AKEY_UPDATE)) {
+		for (i = 0; i < nr; i++) {
+			rc = dc_tx_query_key(tx, DAOS_GET_AKEY, dkey,
+					     &iods[i].iod_name);
+			if (flags & DAOS_COND_AKEY_INSERT) {
+				if (rc == 0)
+					return -DER_EXIST;
+
+				if (rc != -DER_NONEXIST)
+					return rc;
+
+				rc = 0;
+			} else if (rc != 0) {
+				return rc;
+			}
+		}
+	}
 
 	D_ALLOC_PTR(dtsr);
 	if (dtsr == NULL)
@@ -987,6 +1035,9 @@ dc_tx_add_punch_obj(struct dc_tx *tx, daos_handle_t oh, uint64_t flags)
 	struct dc_tx_sub_req	*dtsr;
 	int			 rc = 0;
 
+	D_ASSERTF(!(flags & DAOS_COND_MASK),
+		  "Unexpected cond flag %lx for punch obj\n", flags);
+
 	D_ALLOC_PTR(dtsr);
 	if (dtsr == NULL)
 		return -DER_NOMEM;
@@ -1016,6 +1067,12 @@ dc_tx_add_punch_dkey(struct dc_tx *tx, daos_handle_t oh, uint64_t flags,
 {
 	struct dc_tx_sub_req	*dtsr;
 	int			 rc = 0;
+
+	if (flags & DAOS_COND_PUNCH) {
+		rc = dc_tx_query_key(tx, DAOS_GET_DKEY, dkey, NULL);
+		if (rc != 0)
+			return rc;
+	}
 
 	D_ALLOC_PTR(dtsr);
 	if (dtsr == NULL)
@@ -1059,6 +1116,15 @@ dc_tx_add_punch_akeys(struct dc_tx *tx, daos_handle_t oh, uint64_t flags,
 	struct dc_tx_sub_req	*dtsr;
 	int			 rc = 0;
 	int			 i;
+
+	if (flags & DAOS_COND_PUNCH) {
+		for (i = 0; i < nr; i++) {
+			rc = dc_tx_query_key(tx, DAOS_GET_AKEY,
+					     dkey, &akeys[i]);
+			if (rc != 0)
+				return rc;
+		}
+	}
 
 	D_ALLOC_PTR(dtsr);
 	if (dtsr == NULL)
