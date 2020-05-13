@@ -125,7 +125,9 @@
 	/** Incorrect target for the RPC  */				\
 	ACTION(DER_BAD_TARGET,		(DER_ERR_GURT_BASE + 35))	\
 	/** Group versioning mismatch */				\
-	ACTION(DER_GRPVER,		(DER_ERR_GURT_BASE + 36))
+	ACTION(DER_GRPVER,		(DER_ERR_GURT_BASE + 36))	\
+	/** HLC synchronization error */				\
+	ACTION(DER_HLC_SYNC,		(DER_ERR_GURT_BASE + 37))
 	/** TODO: add more error numbers */
 
 #define D_FOREACH_DAOS_ERR(ACTION)					\

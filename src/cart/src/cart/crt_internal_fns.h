@@ -1,4 +1,4 @@
-/* Copyright (C) 2016-2018 Intel Corporation
+/* Copyright (C) 2016-2020 Intel Corporation
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -96,6 +96,6 @@ void
 crt_hdlr_proto_query(crt_rpc_t *rpc_req);
 
 /* Internal API to sync timestamp with remote message */
-uint64_t crt_hlc_get_msg(uint64_t msg);
+int crt_hlc_get_msg(uint64_t msg, uint64_t *hlc_out);
 
 #endif /* __CRT_INTERNAL_FNS_H__ */

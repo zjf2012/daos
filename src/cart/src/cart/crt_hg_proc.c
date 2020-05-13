@@ -512,7 +512,13 @@ crt_hg_unpack_header(hg_handle_t handle, struct crt_rpc_priv *rpc_priv,
 		D_ERROR("crt_proc_common_hdr failed rc: %d.\n", rc);
 		D_GOTO(out, rc);
 	}
-	(void)crt_hlc_get_msg(rpc_priv->crp_req_hdr.cch_hlc);
+	rc = crt_hlc_get_msg(rpc_priv->crp_req_hdr.cch_hlc, NULL /* hlc_out */);
+	if (rc != 0) {
+		RPC_ERROR(rpc_priv, "Could not sync HLC with "DF_U64": epsilon="
+			  DF_U64"\n", rpc_priv->crp_req_hdr.cch_hlc,
+			  crt_hlc_epsilon_get());
+		rc = 0;
+	}
 	rpc_priv->crp_flags = rpc_priv->crp_req_hdr.cch_flags;
 	if (rpc_priv->crp_flags & CRT_RPC_FLAG_COLL) {
 		rc = crt_proc_corpc_hdr(hg_proc, &rpc_priv->crp_coreq_hdr);
@@ -719,8 +725,17 @@ crt_proc_out_common(crt_proc_t proc, crt_rpc_output_t *data)
 				  "crt_proc_common_hdr failed rc: %d\n", rc);
 			D_GOTO(out, rc);
 		}
-		if (proc_op == CRT_PROC_DECODE)
-			(void)crt_hlc_get_msg(rpc_priv->crp_reply_hdr.cch_hlc);
+		if (proc_op == CRT_PROC_DECODE) {
+			rc = crt_hlc_get_msg(rpc_priv->crp_reply_hdr.cch_hlc,
+					     NULL /* hlc_out */);
+			if (rc != 0) {
+				RPC_ERROR(rpc_priv, "Could not sync HLC with "
+					  DF_U64": epsilon="DF_U64"\n",
+					  rpc_priv->crp_reply_hdr.cch_hlc,
+					  crt_hlc_epsilon_get());
+				rc = 0;
+			}
+		}
 		if (rpc_priv->crp_reply_hdr.cch_rc != 0) {
 			RPC_ERROR(rpc_priv,
 				  "RPC failed to execute on target. error code: %d\n",
