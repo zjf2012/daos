@@ -990,6 +990,7 @@ main(int argc, char **argv)
 	int		i;
 	bool		pause = false;
 	unsigned	seed = 0;
+	int		total = 0;
 	int		rc;
 
 	MPI_Init(&argc, &argv);
@@ -1319,6 +1320,43 @@ main(int argc, char **argv)
 		}
 
 		show_result(now, then, vsize, perf_tests_name[i]);
+	}
+
+	if (ts_mode == TS_MODE_DAOS) {
+		static const int OID_ARR_SIZE	= 8;
+		daos_obj_id_t	oids[OID_ARR_SIZE];
+		daos_anchor_t	anchor;
+		uint32_t	oids_nr;
+		daos_handle_t	toh;
+		daos_epoch_t	epoch;
+
+		rc = daos_cont_create_snap(ts_ctx.tsc_coh, &epoch, NULL, NULL);
+		if (rc)
+			fprintf(stderr, "failed to create snapshot\n");
+
+		rc = daos_cont_open_oit(ts_ctx.tsc_coh, epoch, &toh, NULL);
+		D_ASSERT(rc == 0);
+
+		memset(&anchor, 0, sizeof(anchor));
+		while (1) {
+			oids_nr = OID_ARR_SIZE;
+			rc = daos_cont_list_oit(toh, oids, &oids_nr,
+						&anchor, NULL);
+			D_ASSERTF(rc == 0, "%d\n", rc);
+			D_PRINT("returned %d oids\n", oids_nr);
+			for (i = 0; i < oids_nr; i++) {
+
+				D_PRINT("oid[%d] ="DF_OID"\n", total,
+						DP_OID(oids[i]));
+				total++;
+			}
+			if (daos_anchor_is_eof(&anchor)) {
+				D_PRINT("done\n");
+				break;
+			}
+		}
+		rc = daos_cont_close_oit(toh, NULL);
+		D_ASSERT(rc == 0);
 	}
 
 	dts_ctx_fini(&ts_ctx);

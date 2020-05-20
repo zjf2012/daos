@@ -86,16 +86,12 @@ daos_prop_entry_free_value(struct daos_prop_entry *entry)
 }
 
 void
-daos_prop_free(daos_prop_t *prop)
+daos_prop_fini(daos_prop_t *prop)
 {
-	int i;
+	int	i;
 
-	if (prop == NULL)
-		return;
-	if (prop->dpp_nr == 0 || prop->dpp_entries == NULL) {
-		D_FREE_PTR(prop);
-		return;
-	}
+	if (!prop->dpp_entries)
+		goto out;
 
 	for (i = 0; i < prop->dpp_nr; i++) {
 		struct daos_prop_entry *entry;
@@ -105,7 +101,18 @@ daos_prop_free(daos_prop_t *prop)
 	}
 
 	D_FREE(prop->dpp_entries);
-	D_FREE_PTR(prop);
+	prop->dpp_entries = NULL;
+out:
+	prop->dpp_nr = 0;
+}
+
+void
+daos_prop_free(daos_prop_t *prop)
+{
+	if (prop) {
+		daos_prop_fini(prop);
+		D_FREE_PTR(prop);
+	}
 }
 
 daos_prop_t *

@@ -579,6 +579,17 @@ int
 daos_cont_destroy_snap(daos_handle_t coh, daos_epoch_range_t epr,
 		       daos_event_t *ev);
 
+int
+daos_cont_open_oit(daos_handle_t coh, daos_epoch_t epoch,
+		    daos_handle_t *oh, daos_event_t *ev);
+
+int
+daos_cont_close_oit(daos_handle_t oh, daos_event_t *ev);
+
+int
+daos_cont_list_oit(daos_handle_t oh, daos_obj_id_t *oids, uint32_t *oids_nr,
+		   daos_anchor_t *anchor, daos_event_t *ev);
+
 #if defined(__cplusplus)
 }
 #endif

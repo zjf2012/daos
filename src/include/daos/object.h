@@ -85,6 +85,7 @@ enum {
 				 * These 3 XX_SPEC are mostly for testing
 				 * purpose.
 				 */
+	DAOS_OC_OIT,
 	DAOS_OC_EC_K2P1_L32K,	/* Erasure code, 2 data cells, 1 parity cell,
 				 * cell size 32KB.
 				 */
@@ -287,6 +288,17 @@ daos_oclass_is_ec(daos_obj_id_t oid, struct daos_oclass_attr **attr)
 		return false;
 
 	return DAOS_OC_IS_EC(oca);
+}
+
+/* generate ID for Object ID Table which is just an object */
+static inline daos_obj_id_t
+daos_oit_gen_id(daos_epoch_t epoch)
+{
+	daos_obj_id_t	oid;
+
+	daos_obj_generate_id(&oid, 0, DAOS_OC_OIT, 0);
+	oid.lo = epoch;
+	return oid;
 }
 
 static inline bool

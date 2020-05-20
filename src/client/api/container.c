@@ -23,6 +23,7 @@
 #define D_LOGFAC       DD_FAC(client)
 
 #include <daos/container.h>
+#include <daos/object.h>
 #include <daos/task.h>
 #include "client_internal.h"
 #include "task_internal.h"
@@ -558,4 +559,105 @@ daos_cont_destroy_snap(daos_handle_t coh, daos_epoch_range_t epr,
 	args->epr	= epr;
 
 	return dc_task_schedule(task, true);
+}
+
+int
+daos_cont_open_oit(daos_handle_t coh, daos_epoch_t epoch,
+		   daos_handle_t *oh, daos_event_t *ev)
+{
+	tse_task_t	*task;
+	daos_obj_id_t	 oid;
+	int		 rc;
+
+	oid = daos_oit_gen_id(epoch);
+	rc = dc_obj_open_task_create(coh, oid, DAOS_OO_RO, oh, ev, NULL, &task);
+	if (rc)
+		return rc;
+
+	return dc_task_schedule(task, true);
+}
+
+int
+daos_cont_close_oit(daos_handle_t oh, daos_event_t *ev)
+{
+	tse_task_t	*task;
+	int		 rc;
+
+	rc = dc_obj_close_task_create(oh, ev, NULL, &task);
+	if (rc)
+		return rc;
+
+	return dc_task_schedule(task, true);
+}
+
+struct oit_args {
+	daos_key_desc_t		*oa_kds;
+	d_sg_list_t		 oa_sgl;
+	daos_key_t		 oa_dkey;
+	uint32_t		 oa_bucket;
+	int			 oa_nr;
+};
+
+static int
+cont_list_oit_cb(tse_task_t *task, void *args)
+{
+	struct oit_args	*oa = *(struct oit_args **)args;
+
+	d_sgl_fini(&oa->oa_sgl, false);
+	D_FREE(oa->oa_kds);
+	D_FREE(oa);
+	return 0;
+}
+
+int
+daos_cont_list_oit(daos_handle_t oh, daos_obj_id_t *oids, uint32_t *oids_nr,
+		   daos_anchor_t *anchor, daos_event_t *ev)
+{
+	struct oit_args	*oa;
+	tse_task_t	*task;
+	int		 i;
+        int              rc;
+
+	if (daos_handle_is_inval(oh) ||
+	    oids == NULL || oids_nr == NULL || *oids_nr <= 0 || !anchor)
+		return -DER_INVAL;
+
+	D_ALLOC_PTR(oa);
+	if (!oa)
+		return -DER_NOMEM;
+
+	oa->oa_nr = *oids_nr;
+	D_ALLOC_ARRAY(oa->oa_kds, oa->oa_nr);
+	if (!oa->oa_kds)
+		D_GOTO(failed, rc = -DER_NOMEM);
+
+	rc = d_sgl_init(&oa->oa_sgl, oa->oa_nr);
+	if (rc)
+		D_GOTO(failed, rc = -DER_NOMEM);
+
+	for (i = 0; i < oa->oa_nr; i++)
+		d_iov_set(&oa->oa_sgl.sg_iovs[i], &oids[i], sizeof(oids[i]));
+
+	/* XXX all OIDs are stored under one dkey today */
+	d_iov_set(&oa->oa_dkey, &oa->oa_bucket, sizeof(oa->oa_bucket));
+	rc = dc_obj_list_akey_task_create(oh, DAOS_TX_NONE, &oa->oa_dkey,
+					  oids_nr, oa->oa_kds, &oa->oa_sgl,
+					  anchor, ev, NULL, &task);
+        if (rc)
+                return rc;
+
+	rc = tse_task_register_comp_cb(task, cont_list_oit_cb, &oa, sizeof(oa));
+	if (rc) {
+		tse_task_complete(task, rc);
+		D_GOTO(failed, rc);
+	}
+
+        return dc_task_schedule(task, true);
+failed:
+	if (task)
+		d_sgl_fini(&oa->oa_sgl, false);
+	if (oa->oa_kds)
+		D_FREE(oa->oa_kds);
+	D_FREE(oa);
+	return rc;
 }

@@ -1632,6 +1632,8 @@ ds_cont_tgt_query_aggregator(crt_rpc_t *source, crt_rpc_t *result, void *priv)
 struct cont_snap_args {
 	uuid_t		 pool_uuid;
 	uuid_t		 cont_uuid;
+	uuid_t		 coh_uuid;
+	uint64_t	 snap_epoch;
 	int		 snap_count;
 	uint64_t	*snapshots;
 };
@@ -1745,6 +1747,11 @@ cont_snap_notify_one(void *vin)
 	rc = ds_cont_child_lookup(args->pool_uuid, args->cont_uuid, &cont);
 	if (rc != 0)
 		return rc;
+
+	rc = cont_child_gather_oids(cont, args->coh_uuid, args->snap_epoch);
+	if (rc)
+		return rc;
+
 	cont->sc_aggregation_max = crt_hlc_get();
 	ds_cont_child_put(cont);
 	return rc;
@@ -1762,6 +1769,9 @@ ds_cont_tgt_snapshot_notify_handler(crt_rpc_t *rpc)
 
 	uuid_copy(args.pool_uuid, in->tsi_pool_uuid);
 	uuid_copy(args.cont_uuid, in->tsi_cont_uuid);
+	uuid_copy(args.coh_uuid, in->tsi_coh_uuid);
+	args.snap_epoch = in->tsi_epoch;
+
 	out->tso_rc = dss_thread_collective(cont_snap_notify_one, &args, 0,
 					    DSS_ULT_IO);
 	if (out->tso_rc != 0)

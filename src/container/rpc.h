@@ -344,7 +344,9 @@ CRT_RPC_DECLARE(cont_tgt_epoch_aggregate, DAOS_ISEQ_CONT_TGT_EPOCH_AGGREGATE,
 
 #define DAOS_ISEQ_CONT_TGT_SNAPSHOT_NOTIFY /* input fields */	 \
 	((uuid_t)		(tsi_cont_uuid)		CRT_VAR) \
-	((uuid_t)		(tsi_pool_uuid)		CRT_VAR)
+	((uuid_t)		(tsi_pool_uuid)		CRT_VAR) \
+	((uuid_t)		(tsi_coh_uuid)		CRT_VAR) \
+	((daos_epoch_t)		(tsi_epoch)		CRT_VAR)
 
 #define DAOS_OSEQ_CONT_TGT_SNAPSHOT_NOTIFY /* output fields */	 \
 				/* number of errors */		 \
