@@ -254,13 +254,16 @@ CRT_RPC_DECLARE(obj_key_enum, DAOS_ISEQ_OBJ_KEY_ENUM, DAOS_OSEQ_OBJ_KEY_ENUM)
 CRT_RPC_DECLARE(obj_punch, DAOS_ISEQ_OBJ_PUNCH, DAOS_OSEQ_OBJ_PUNCH)
 
 #define DAOS_ISEQ_OBJ_QUERY_KEY	/* input fields */		 \
+	((struct dtx_id)	(okqi_dti)		CRT_VAR) \
 	((uuid_t)		(okqi_co_hdl)		CRT_VAR) \
 	((uuid_t)		(okqi_pool_uuid)	CRT_VAR) \
 	((uuid_t)		(okqi_co_uuid)		CRT_VAR) \
 	((daos_unit_oid_t)	(okqi_oid)		CRT_VAR) \
 	((uint64_t)		(okqi_epoch)		CRT_VAR) \
 	((uint32_t)		(okqi_map_ver)		CRT_VAR) \
+	((uint32_t)		(okqi_api_flags)	CRT_VAR) \
 	((uint32_t)		(okqi_flags)		CRT_VAR) \
+	((uint32_t)		(okqi_padding)		CRT_VAR) \
 	((daos_key_t)		(okqi_dkey)		CRT_VAR) \
 	((daos_key_t)		(okqi_akey)		CRT_VAR) \
 	((daos_recx_t)		(okqi_recx)		CRT_VAR)

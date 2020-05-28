@@ -2299,6 +2299,7 @@ ds_obj_query_key_handler(crt_rpc_t *rpc)
 	daos_key_t			*dkey;
 	daos_key_t			*akey;
 	struct obj_io_context		 ioc;
+	struct dtx_handle		 dth;
 	int				 rc;
 
 	okqi = crt_req_get(rpc);
@@ -2306,10 +2307,11 @@ ds_obj_query_key_handler(crt_rpc_t *rpc)
 	okqo = crt_reply_get(rpc);
 	D_ASSERT(okqo != NULL);
 
-	D_DEBUG(DB_IO, "flags = %d\n", okqi->okqi_flags);
+	D_DEBUG(DB_IO, "flags = %d\n", okqi->okqi_api_flags);
 
 	if (okqi->okqi_epoch == DAOS_EPOCH_MAX || okqi->okqi_epoch == 0) {
 		okqi->okqi_epoch = crt_hlc_get();
+		okqi->okqi_flags &= ~ORF_EPOCH_UNCERTAIN;
 		D_DEBUG(DB_IO, "overwrite epoch "DF_U64"\n", okqi->okqi_epoch);
 	}
 
@@ -2323,14 +2325,24 @@ ds_obj_query_key_handler(crt_rpc_t *rpc)
 	akey = &okqi->okqi_akey;
 	d_iov_set(&okqo->okqo_akey, NULL, 0);
 	d_iov_set(&okqo->okqo_dkey, NULL, 0);
-	if (okqi->okqi_flags & DAOS_GET_DKEY)
+	if (okqi->okqi_api_flags & DAOS_GET_DKEY)
 		dkey = &okqo->okqo_dkey;
-	if (okqi->okqi_flags & DAOS_GET_AKEY)
+	if (okqi->okqi_api_flags & DAOS_GET_AKEY)
 		akey = &okqo->okqo_akey;
 
+	rc = dtx_begin(ioc.ioc_coc, &okqi->okqi_dti, okqi->okqi_epoch,
+		       okqi->okqi_flags & ORF_EPOCH_UNCERTAIN,
+		       okqi->okqi_map_ver, &okqi->okqi_oid, 0,
+		       DAOS_INTENT_DEFAULT, NULL, 0, &dth);
+	D_ASSERTF(rc == 0, "%d\n", rc);
+
 	rc = vos_obj_query_key(ioc.ioc_vos_coh, okqi->okqi_oid,
-			       VOS_USE_TIMESTAMPS | okqi->okqi_flags,
-			       okqi->okqi_epoch, dkey, akey, &okqo->okqo_recx);
+			       VOS_USE_TIMESTAMPS | okqi->okqi_api_flags,
+			       okqi->okqi_epoch, dkey, akey, &okqo->okqo_recx,
+			       &dth);
+
+	rc = dtx_end(&dth, ioc.ioc_coc, rc);
+
 out:
 	obj_reply_set_status(rpc, rc);
 	obj_reply_map_version_set(rpc, ioc.ioc_map_ver);

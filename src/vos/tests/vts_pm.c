@@ -733,7 +733,7 @@ punch_model_test(void **state)
 
 	rc = vos_obj_query_key(arg->ctx.tc_co_hdl, oid,
 			       DAOS_GET_RECX | DAOS_GET_MAX,
-			       11, &dkey, &akey, &rex);
+			       11, &dkey, &akey, &rex, NULL);
 	assert_int_equal(rc, 0);
 	assert_int_equal(rex.rx_idx, 0);
 	assert_int_equal(rex.rx_nr, strlen(latest));
