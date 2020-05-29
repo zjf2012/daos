@@ -201,8 +201,10 @@ def scons():
                                "daos_server")
     adminbin = install_go_bin(senv, gosrc, [denv.nvmecontrol], "daos_admin",
                               "daos_admin")
+    fwbin = install_go_bin(senv, gosrc, [denv.nvmecontrol], "daos_firmware",
+                              "daos_firmware")
 
-    AlwaysBuild([serverbin, adminbin])
+    AlwaysBuild([serverbin, adminbin, fwbin])
 
 if __name__ == "SCons.Script":
     scons()
