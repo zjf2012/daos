@@ -67,17 +67,24 @@ func NewStorageControlService(log logging.Logger, bdev *bdev.Provider, scm *scm.
 // canAccessBdevs evaluates if any specified Bdevs are not accessible.
 func (c *StorageControlService) canAccessBdevs(sr *bdev.ScanResponse) (missing []string, ok bool) {
 	getController := func(pciAddr string) *storage.NvmeController {
-		for _, c := range sr.Controllers {
-			if c.PciAddr == pciAddr {
-				return c
+		for _, s := range sr.Controllers {
+			c.log.Debugf("***s.PciAddr = %s, pciAddr = %s\n", s.PciAddr, pciAddr)
+			// TODO Need solution for VMD NvmeController not being
+			// found (s.PciAddr = NVMe dev, pciAddr = VMD addr in
+			// config)
+			if s.PciAddr == pciAddr {
+				return s
 			}
 		}
 		return nil
 	}
 
 	for _, storageCfg := range c.instanceStorage {
+		c.log.Debugf("***GetNvmeDevs()\n")
 		for _, pciAddr := range storageCfg.Bdev.GetNvmeDevs() {
+			c.log.Debugf("***%s\n", pciAddr)
 			if getController(pciAddr) == nil {
+				c.log.Debugf("***missing()\n")
 				missing = append(missing, pciAddr)
 			}
 		}
@@ -88,10 +95,12 @@ func (c *StorageControlService) canAccessBdevs(sr *bdev.ScanResponse) (missing [
 
 // Setup delegates to Storage implementation's Setup methods.
 func (c *StorageControlService) Setup() error {
+	c.log.Debugf("***calling Scan()\n")
 	sr, err := c.bdev.Scan(bdev.ScanRequest{})
 	if err != nil {
 		c.log.Debugf("%s\n", errors.Wrap(err, "Warning, NVMe Scan"))
 	} else {
+		c.log.Debugf("***canAccessBdevs()\n")
 
 		// fail if config specified nvme devices are inaccessible
 		missing, ok := c.canAccessBdevs(sr)

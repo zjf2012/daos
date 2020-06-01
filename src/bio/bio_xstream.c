@@ -29,6 +29,7 @@
 #include <abt.h>
 #include <spdk/env.h>
 #include <spdk/nvme.h>
+#include <spdk/vmd.h>
 #include <spdk/thread.h>
 #include <spdk/bdev.h>
 #include <spdk/io_channel.h>
@@ -113,6 +114,7 @@ opts_add_pci_addr(struct spdk_env_opts *opts, struct spdk_pci_addr **list,
 	}
 
 	opts->num_pci_addr++;
+	D_ERROR("opts->num_pci_addr++ = %zu\n", opts->num_pci_addr);
 	return 0;
 }
 
@@ -126,13 +128,23 @@ populate_whitelist(struct spdk_env_opts *opts)
 	int				 rc = 0;
 
 	/* Don't need to pass whitelist for non-NVMe devices */
-	if (nvme_glb.bd_bdev_class != BDEV_CLASS_NVME)
+	D_ERROR("***nvme_glb.bd_bdev_class = %d\n", nvme_glb.bd_bdev_class);
+	if (nvme_glb.bd_bdev_class != BDEV_CLASS_NVME &&
+	    nvme_glb.bd_bdev_class != BDEV_CLASS_VMD) {
+		D_ERROR("***Not BDEV_CLASS_NVME or VMD\n");
 		return 0;
+	}
 
 	sp = spdk_conf_find_section(NULL, "Nvme");
 	if (sp == NULL) {
-		D_ERROR("unexpected empty config\n");
-		return -DER_INVAL;
+		/* first check for VMD section */
+		sp = spdk_conf_find_section(NULL, "Vmd");
+		if (sp)
+			D_ERROR("***VMD devices used in config\n");
+		else {
+			D_ERROR("unexpected empty config\n");
+			return -DER_INVAL;
+		}
 	}
 
 	D_ALLOC_PTR(trid);
@@ -153,6 +165,8 @@ populate_whitelist(struct spdk_env_opts *opts)
 			rc = -DER_INVAL;
 			break;
 		}
+
+		D_ERROR("***trid->traddr = %s\n", trid->traddr);
 
 		if (trid->trtype != SPDK_NVME_TRANSPORT_PCIE) {
 			D_ERROR("unexpected non-PCIE transport\n");
@@ -212,6 +226,16 @@ bio_spdk_env_init(void)
 		D_ERROR("Failed to initialize SPDK env, "DF_RC"\n", DP_RC(rc));
 		return rc;
 	}
+
+	if (nvme_glb.bd_bdev_class == BDEV_CLASS_VMD) {
+		rc = spdk_vmd_init();
+		if (rc != 0) {
+			D_ERROR("***Failed to initialize VMD\n");
+				return rc;
+		} else
+			D_ERROR("***Initalized VMD\n");
+	}
+
 
 	spdk_unaffinitize_thread();
 
@@ -288,6 +312,7 @@ bio_nvme_init(const char *storage_path, const char *nvme_conf, int shm_id,
 	bio_chk_cnt_max = DAOS_DMA_CHUNK_CNT_MAX;
 
 	env = getenv("VOS_BDEV_CLASS");
+	D_ERROR("***getenv(VOS_BDEV_CLASS) = %s\n", getenv("VOS_BDEV_CLASS"));
 	if (env && strcasecmp(env, "MALLOC") == 0) {
 		D_WARN("Malloc device will be used!\n");
 		nvme_glb.bd_bdev_class = BDEV_CLASS_MALLOC;
@@ -298,6 +323,9 @@ bio_nvme_init(const char *storage_path, const char *nvme_conf, int shm_id,
 	} else if (env && strcasecmp(env, "AIO") == 0) {
 		D_WARN("AIO device will be used!\n");
 		nvme_glb.bd_bdev_class = BDEV_CLASS_AIO;
+	} else if (env && strcasecmp(env, "VMD") == 0) {
+		D_WARN("***VMD device will be used!\n");
+		nvme_glb.bd_bdev_class = BDEV_CLASS_VMD;
 	}
 
 	bio_chk_sz = (size_mb << 20) >> BIO_DMA_PAGE_SHIFT;
@@ -465,6 +493,9 @@ xs_poll_completion(struct bio_xs_context *ctxt, unsigned int *inflights)
 int
 get_bdev_type(struct spdk_bdev *bdev)
 {
+	D_ERROR("***spdk_bdev_get_product_name(bdev) = %s\n",
+		spdk_bdev_get_product_name(bdev));
+	/* TODO Need option for VMD */
 	if (strcmp(spdk_bdev_get_product_name(bdev), "NVMe disk") == 0)
 		return BDEV_CLASS_NVME;
 	else if (strcmp(spdk_bdev_get_product_name(bdev), "Malloc disk") == 0)
@@ -617,6 +648,9 @@ init_bio_bdevs(struct bio_xs_context *ctxt)
 {
 	struct spdk_bdev *bdev;
 	int rc = 0;
+
+	if (spdk_bdev_first() == NULL)
+		D_ERROR("***spdk_bdev_first() = NULL\n");
 
 	for (bdev = spdk_bdev_first(); bdev != NULL;
 	     bdev = spdk_bdev_next(bdev)) {
@@ -1079,6 +1113,7 @@ bio_xsctxt_alloc(struct bio_xs_context **pctxt, int tgt_id)
 
 		/* Initialize all types of devices */
 		common_prep_arg(&cp_arg);
+		D_ERROR("spdk_bdev_initialize()\n");
 		spdk_bdev_initialize(common_init_cb, &cp_arg);
 		xs_poll_completion(ctxt, &cp_arg.cca_inflights);
 
