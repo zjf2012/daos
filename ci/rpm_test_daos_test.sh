@@ -7,7 +7,7 @@ set -uex
 if git show -s --format=%B | grep "^Skip-test: true"; then
   exit 0
 fi
-nodelist=("${NODELIST//,/ }")
+nodelist=(${NODELIST//,/ })
 src/tests/ftest/config_file_gen.py -n "${nodelist[0]}" \
   -a /tmp/daos_agent.yml -s /tmp/daos_server.yml
 src/tests/ftest/config_file_gen.py -n "${nodelist[0]}" -d /tmp/dmg.yml
