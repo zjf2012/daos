@@ -3772,6 +3772,98 @@ out:
 	return rc;
 }
 
+struct redist_open_hdls_arg {
+	struct pool_svc *svc;
+};
+
+static int
+redist_open_hdls_cb(daos_handle_t ih, d_iov_t *key, d_iov_t *val, void *varg)
+{
+	struct redist_open_hdls_arg *arg = varg;
+	uuid_t *uuid = key->iov_buf;
+	struct pool_hdl *hdl = val->iov_buf;
+	int rc;
+
+	if (key->iov_len != sizeof(uuid_t) ||
+	    val->iov_len != sizeof(struct pool_hdl)) {
+		D_ERROR("invalid key/value size: key="DF_U64" value="DF_U64"\n",
+			key->iov_len, val->iov_len);
+		return -DER_IO;
+	}
+
+	rc = pool_connect_iv_dist(arg->svc, *uuid, hdl->ph_flags,
+				  hdl->ph_sec_capas, &in->pci_cred);
+	if (rc != 0)
+		D_ERROR(DF_UUID": failed to connect to targets: "DF_RC"\n",
+			DP_UUID(*uuid), DP_RC(rc));
+
+	return rc;
+}
+
+static int
+redist_open_hdls(uuid_t pool_uuid)
+{
+	struct pool_svc			*svc;
+	struct redist_open_hdls_arg	 arg;
+	uint32_t			 connectable;
+	struct rdb_tx			 tx;
+	d_iov_t				 value;
+	uint32_t			 nhandles;
+	int				 rc;
+
+	rc = pool_svc_lookup_leader(pool_uuid, &svc, NULL /* hint */);
+	if (rc != 0)
+		return rc;
+
+	rc = rdb_tx_begin(svc->ps_rsvc.s_db, svc->ps_rsvc.s_term, &tx);
+	if (rc != 0)
+		D_GOTO(out_svc, rc);
+
+	ABT_rwlock_rdlock(svc->ps_lock);
+
+	/* Check if pool is being destroyed and not accepting connections */
+	d_iov_set(&value, &connectable, sizeof(connectable));
+	rc = rdb_tx_lookup(&tx, &svc->ps_root,
+			   &ds_pool_prop_connectable, &value);
+	if (rc != 0)
+		D_GOTO(out_lock, rc);
+	D_DEBUG(DF_DSMS, DF_UUID": connectable=%u\n",
+		DP_UUID(pool_uuid), connectable);
+	if (!connectable) {
+		D_ERROR(DF_UUID": being destroyed, not accepting connections\n",
+			DP_UUID(pool_uuid));
+		D_GOTO(out_lock, rc = -DER_BUSY);
+	}
+
+	/* Check how many handles are currently open */
+	d_iov_set(&value, &nhandles, sizeof(nhandles));
+	rc = rdb_tx_lookup(&tx, &svc->ps_root, &ds_pool_prop_nhandles, &value);
+	if (rc != 0)
+		D_GOTO(out_lock, rc);
+
+	D_DEBUG(DF_DSMS, DF_UUID": need to re-distribute %u handles\n",
+		DP_UUID(pool_uuid), nhandles);
+
+	/* Abort early if there are no open handles */
+	if (nhandles == 0)
+		D_GOTO(out_lock, rc);
+
+	arg.svc = svc;
+
+	/* Iterate the open handles and re-update them with IV */
+	rc = rdb_tx_iterate(&tx, &svc->ps_handles, false /* backward */,
+			    redist_open_hdls_cb, &arg);
+	if (rc != 0)
+		D_GOTO(out_lock, rc);
+
+out_lock:
+	ABT_rwlock_unlock(svc->ps_lock);
+	rdb_tx_end(&tx);
+out_svc:
+	pool_svc_put_leader(svc);
+	return rc;
+}
+
 int
 ds_pool_tgt_exclude_out(uuid_t pool_uuid, struct pool_target_id_list *list)
 {
@@ -3827,6 +3919,18 @@ ds_pool_update(uuid_t pool_uuid, crt_opcode_t opc,
 	if (!updated || !(opc == POOL_EXCLUDE || opc == POOL_ADD))
 		D_GOTO(out, rc);
 
+	/* If adding or reintegrating a node, redistribute any existing open
+	 * handles to that node prior to starting the rebuild/migration process
+	 */
+	if (opc == POOL_ADD) {
+		rc = redist_open_hdls(pool_uuid);
+		if (rc) {
+			D_ERROR("redist_open_hdls fails rc: "DF_RC"\n",
+				DP_RC(rc));
+			D_GOTO(out, rc);
+		}
+	}
+
 	env = getenv(REBUILD_ENV);
 	if ((env && !strcasecmp(env, REBUILD_ENV_DISABLED)) ||
 	     daos_fail_check(DAOS_REBUILD_DISABLE)) {
@@ -3851,7 +3955,7 @@ ds_pool_update(uuid_t pool_uuid, crt_opcode_t opc,
 
 	rc = ds_rebuild_schedule(pool_uuid, *map_version, &target_list, op);
 	if (rc != 0) {
-		D_ERROR("rebuild fails rc %d\n", rc);
+		D_ERROR("rebuild fails rc: "DF_RC"\n", DP_RC(rc));
 		D_GOTO(out, rc);
 	}
 
