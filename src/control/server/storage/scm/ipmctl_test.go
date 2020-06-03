@@ -31,6 +31,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/pkg/errors"
 
+	"github.com/daos-stack/daos/src/control/common"
 	. "github.com/daos-stack/daos/src/control/common"
 	"github.com/daos-stack/daos/src/control/common/proto"
 	"github.com/daos-stack/daos/src/control/lib/ipmctl"
@@ -42,7 +43,7 @@ import (
 func MockDiscovery() ipmctl.DeviceDiscovery {
 	m := proto.MockScmModule()
 
-	return ipmctl.DeviceDiscovery{
+	result := ipmctl.DeviceDiscovery{
 		Physical_id:          uint16(m.Physicalid),
 		Channel_id:           uint16(m.Channelid),
 		Channel_pos:          uint16(m.Channelposition),
@@ -50,6 +51,10 @@ func MockDiscovery() ipmctl.DeviceDiscovery {
 		Socket_id:            uint16(m.Socketid),
 		Capacity:             m.Capacity,
 	}
+
+	_ = copy(result.Uid[:], m.UID)
+
+	return result
 }
 
 // MockModule converts ipmctl type SCM module and returns storage/scm
@@ -67,6 +72,7 @@ func MockModule(d *ipmctl.DeviceDiscovery) storage.ScmModule {
 		ControllerID:    uint32(d.Memory_controller_id),
 		SocketID:        uint32(d.Socket_id),
 		Capacity:        d.Capacity,
+		UID:             d.Uid.String(),
 	}
 }
 
@@ -443,6 +449,31 @@ func TestGetNamespaces(t *testing.T) {
 
 			AssertEqual(t, commands, tt.expCommands, tt.desc+": unexpected list of commands run")
 			AssertEqual(t, namespaces, tt.expNamespaces, tt.desc+": unexpected list of pmem device file names")
+		})
+	}
+}
+
+func TestIpmctl_GetFirmwareStatus(t *testing.T) {
+	for name, tc := range map[string]struct {
+		inputUID string
+		cfg      *mockIpmctlCfg
+		expErr   error
+	}{
+		"empty deviceUID": {
+			expErr: errors.New("invalid SCM module UID"),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			log, buf := logging.NewTestLogger(t.Name())
+			defer ShowBufferOnFailure(t, buf)
+
+			mockBinding := newMockIpmctl(tc.cfg)
+
+			cr := newCmdRunner(log, mockBinding, nil, nil)
+
+			_, err := cr.GetFirmwareStatus(tc.inputUID)
+
+			common.CmpErr(t, tc.expErr, err)
 		})
 	}
 }

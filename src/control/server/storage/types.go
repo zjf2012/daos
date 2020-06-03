@@ -61,6 +61,7 @@ type (
 		SocketID        uint32
 		PhysicalID      uint32
 		Capacity        uint64
+		UID             string
 	}
 
 	// ScmModules is a type alias for []ScmModule that implements fmt.Stringer.
@@ -84,6 +85,14 @@ type (
 	}
 
 	ScmMountPoints []*ScmMountPoint
+
+	// ScmFirmwareStatus describes the firmware status of an SCM module.
+	ScmFirmwareStatus struct {
+		ActiveVersion     string
+		StagedVersion     string
+		ImageMaxSizeBytes uint32
+		UpdateStatus      uint32
+	}
 
 	// NvmeDeviceHealth represents a set of health statistics for a NVMe device.
 	NvmeDeviceHealth struct {

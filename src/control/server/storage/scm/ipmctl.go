@@ -96,6 +96,7 @@ func (r *cmdRunner) checkNdctl() error {
 	return nil
 }
 
+// Discover scans the system for SCM modules and returns a list of them.
 func (r *cmdRunner) Discover() (storage.ScmModules, error) {
 	discovery, err := r.binding.Discover()
 	if err != nil {
@@ -112,10 +113,31 @@ func (r *cmdRunner) Discover() (storage.ScmModules, error) {
 			SocketID:        uint32(d.Socket_id),
 			PhysicalID:      uint32(d.Physical_id),
 			Capacity:        d.Capacity,
+			UID:             d.Uid.String(),
 		})
 	}
 
 	return modules, nil
+}
+
+// GetFirmwareStatus gets the current firmware status for a specific device.
+func (r *cmdRunner) GetFirmwareStatus(deviceUID string) (*storage.ScmFirmwareStatus, error) {
+	var UID ipmctl.DeviceUID
+	n := copy(UID[:], deviceUID)
+	if n == 0 {
+		return nil, errors.New("invalid SCM module UID")
+	}
+	info, err := r.binding.GetFirmwareInfo(UID)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to get firmware info for device %q", deviceUID)
+	}
+
+	return &storage.ScmFirmwareStatus{
+		ActiveVersion:     info.ActiveFWVersion.String(),
+		StagedVersion:     info.StagedFWVersion.String(),
+		ImageMaxSizeBytes: info.FWImageMaxSize,
+		UpdateStatus:      info.FWUpdateStatus,
+	}, nil
 }
 
 // getState establishes state of SCM regions and namespaces on local server.

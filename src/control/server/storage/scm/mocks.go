@@ -171,6 +171,11 @@ func (mb *MockBackend) PrepReset(_ storage.ScmState) (bool, error) {
 	return mb.cfg.PrepNeedsReboot, mb.cfg.PrepErr
 }
 
+// TODO KJ
+func (mb *MockBackend) GetFirmwareStatus(deviceUID string) (*storage.ScmFirmwareStatus, error) {
+	return nil, nil
+}
+
 func NewMockBackend(cfg *MockBackendConfig) *MockBackend {
 	if cfg == nil {
 		cfg = &MockBackendConfig{}

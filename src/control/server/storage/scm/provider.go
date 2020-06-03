@@ -137,6 +137,17 @@ type (
 		Mounted bool
 	}
 
+	// FirmwareQueryRequest defines the parameters for a firmware status query.
+	FirmwareQueryRequest struct {
+		pbin.ForwardableRequest
+		Device string
+	}
+
+	// FirmwareQueryResponse contains the results of a successful firmware status query.
+	FirmwareQueryResponse struct {
+		FirmwareStatus storage.ScmFirmwareStatus
+	}
+
 	// Backend defines a set of methods to be implemented by a SCM backend.
 	Backend interface {
 		Discover() (storage.ScmModules, error)
@@ -144,6 +155,7 @@ type (
 		PrepReset(storage.ScmState) (bool, error)
 		GetState() (storage.ScmState, error)
 		GetNamespaces() (storage.ScmNamespaces, error)
+		GetFirmwareStatus(deviceUID string) (*storage.ScmFirmwareStatus, error)
 	}
 
 	// SystemProvider defines a set of methods to be implemented by a provider
