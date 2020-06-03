@@ -4,7 +4,7 @@ from prereq_tools import GitRepoRetriever
 
 def define_checksum_timing(build, env, prereqs):
     """Define the Checksum Timing build"""
-    checksum_timing_libs = ['daos_common']
+    checksum_timing_libs = ['daos_common_cli']
     AddOption('--mchecksum',
               dest='mchecksum',
               action='store_true',
@@ -60,7 +60,7 @@ def scons():
     daos_build.test(tenv, 'lru', 'lru.c',
                     LIBS=['daos_common', 'gurt', 'cart'])
     daos_build.test(tenv, 'sched', 'sched.c',
-                    LIBS=['daos_common', 'gurt', 'cart', 'cmocka'])
+                    LIBS=['daos_common_cli', 'gurt', 'cart', 'cmocka'])
     daos_build.test(tenv, 'abt_perf', 'abt_perf.c',
                     LIBS=['daos_common', 'gurt', 'abt'])
     daos_build.test(tenv, 'acl_real_tests', 'acl_util_real_tests.c',

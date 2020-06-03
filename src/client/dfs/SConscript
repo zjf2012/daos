@@ -35,7 +35,7 @@ def scons():
 
     denv.AppendUnique(CPPDEFINES=['-DFUSE_USE_VERSION=32'])
 
-    libraries = ['$LIBS', 'daos_common', 'daos', 'uuid', 'gurt']
+    libraries = ['$LIBS', 'daos_common_cli', 'daos', 'uuid', 'gurt']
 
     dfs_src = ['dfs.c']
     dfs = daos_build.library(denv, 'dfs', dfs_src, LIBS=libraries)

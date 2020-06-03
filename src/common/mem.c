@@ -37,6 +37,14 @@
 #define TXD_CB_NUM		(1 << 5)	/* 32 callbacks */
 #define TXD_CB_MAX		(1 << 20)	/* 1 million callbacks */
 
+
+struct umem_tx_stage_item {
+	int		 txi_magic;
+	umem_tx_cb_t	 txi_fn;
+	void		*txi_data;
+};
+
+#ifdef DAOS_COMMON_PMEM
 /** Convert an offset to an id.   No invalid flags will be maintained
  *  in the conversion.
  *
@@ -74,12 +82,6 @@ umem_id2off(const struct umem_instance *umm, PMEMoid oid)
 
 	return oid.off;
 }
-
-struct umem_tx_stage_item {
-	int		 txi_magic;
-	umem_tx_cb_t	 txi_fn;
-	void		*txi_data;
-};
 
 /** persistent memory operations (depends on pmdk) */
 
@@ -380,6 +382,35 @@ umem_tx_errno(int err)
 	return daos_errno2der(err);
 }
 
+static int
+pmem_no_tx_add(struct umem_instance *umm, umem_off_t umoff,
+	       uint64_t offset, size_t size)
+{
+	return 0;
+}
+
+static int
+pmem_no_tx_add_ptr(struct umem_instance *umm, void *ptr, size_t size)
+{
+	return 0;
+}
+
+static umem_ops_t	pmem_no_snap_ops = {
+	.mo_tx_free		= pmem_tx_free,
+	.mo_tx_alloc		= pmem_tx_alloc,
+	.mo_tx_add		= pmem_no_tx_add,
+	.mo_tx_add_ptr		= pmem_no_tx_add_ptr,
+	.mo_tx_abort		= pmem_tx_abort,
+	.mo_tx_begin		= pmem_tx_begin,
+	.mo_tx_commit		= pmem_tx_commit,
+	.mo_reserve		= pmem_reserve,
+	.mo_cancel		= pmem_cancel,
+	.mo_tx_publish		= pmem_tx_publish,
+	.mo_tx_add_callback	= pmem_tx_add_callback,
+};
+#endif
+
+
 /* volatile memroy operations */
 
 static int
@@ -427,33 +458,6 @@ static umem_ops_t	vmem_ops = {
 	.mo_tx_add_callback = vmem_tx_add_callback,
 };
 
-static int
-pmem_no_tx_add(struct umem_instance *umm, umem_off_t umoff,
-	       uint64_t offset, size_t size)
-{
-	return 0;
-}
-
-static int
-pmem_no_tx_add_ptr(struct umem_instance *umm, void *ptr, size_t size)
-{
-	return 0;
-}
-
-static umem_ops_t	pmem_no_snap_ops = {
-	.mo_tx_free		= pmem_tx_free,
-	.mo_tx_alloc		= pmem_tx_alloc,
-	.mo_tx_add		= pmem_no_tx_add,
-	.mo_tx_add_ptr		= pmem_no_tx_add_ptr,
-	.mo_tx_abort		= pmem_tx_abort,
-	.mo_tx_begin		= pmem_tx_begin,
-	.mo_tx_commit		= pmem_tx_commit,
-	.mo_reserve		= pmem_reserve,
-	.mo_cancel		= pmem_cancel,
-	.mo_tx_publish		= pmem_tx_publish,
-	.mo_tx_add_callback	= pmem_tx_add_callback,
-};
-
 /** Unified memory class definition */
 struct umem_class {
 	umem_class_id_t           umc_id;
@@ -468,6 +472,7 @@ static struct umem_class umem_class_defined[] = {
 		.umc_ops	= &vmem_ops,
 		.umc_name	= "vmem",
 	},
+#ifdef DAOS_COMMON_PMEM
 	{
 		.umc_id		= UMEM_CLASS_PMEM,
 		.umc_ops	= &pmem_ops,
@@ -478,6 +483,7 @@ static struct umem_class umem_class_defined[] = {
 		.umc_ops	= &pmem_no_snap_ops,
 		.umc_name	= "pmem_no_snap",
 	},
+#endif
 	{
 		.umc_id		= UMEM_CLASS_UNKNOWN,
 		.umc_ops	= NULL,

@@ -41,7 +41,6 @@
  * umem		Unified memory abstraction
  * umoff	Unified Memory offset
  */
-
 #include <libpmemobj.h>
 
 /** The offset of an object from the base address of the pool */
@@ -237,7 +236,6 @@ typedef struct {
 	int		 (*mo_tx_publish)(struct umem_instance *umm,
 					  struct pobj_action *actv,
 					  int actv_cnt);
-
 	/**
 	 * Add one commit or abort callback to current transaction.
 	 *
@@ -268,18 +266,18 @@ struct umem_attr {
 
 /** instance of an unified memory class */
 struct umem_instance {
-	umem_class_id_t		 umm_id;
-	int			 umm_nospc_rc;
-	const char		*umm_name;
-	PMEMobjpool		*umm_pool;
-	/** Cache the pool id field for umem addresses */
-	uint64_t		 umm_pool_uuid_lo;
-	/** Cache the base address of the pool */
-	uint64_t		 umm_base;
-	/** class member functions */
-	umem_ops_t		*umm_ops;
+	umem_class_id_t			umm_id;
+	int				umm_nospc_rc;
+	const char			*umm_name;
+	PMEMobjpool			*umm_pool;
 	/** Slabs of the umem pool */
 	struct pobj_alloc_class_desc	 umm_slabs[UMM_SLABS_CNT];
+	/** Cache the pool id field for umem addresses */
+	uint64_t			umm_pool_uuid_lo;
+	/** Cache the base address of the pool */
+	uint64_t			umm_base;
+	/** class member functions */
+	umem_ops_t			*umm_ops;
 };
 
 static inline bool

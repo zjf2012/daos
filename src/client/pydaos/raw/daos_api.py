@@ -2263,7 +2263,7 @@ class DaosContext(object):
         self.libdaos = ctypes.CDLL(
             os.path.join(path, 'libdaos.so.{}'.format(daos_version)),
             mode=ctypes.DEFAULT_MODE)
-        ctypes.CDLL(os.path.join(path, 'libdaos_common.so'),
+        ctypes.CDLL(os.path.join(path, 'libdaos_common_cli.so'),
                     mode=ctypes.RTLD_GLOBAL)
 
         self.libtest = ctypes.CDLL(os.path.join(path, 'libdaos_tests.so'),

@@ -114,7 +114,7 @@
                   <arg value="-L/usr/local/lib64"/>
                   <arg value="-ldaos"/>
                   <arg value="-luuid"/>
-                  <arg value="-ldaos_common"/>
+                  <arg value="-ldaos_common_cli"/>
                   <arg value="-ldfs"/>
                   <arg value="-lcart"/>
                 </exec>

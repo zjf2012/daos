@@ -1,6 +1,30 @@
 """Build common libraries"""
 import daos_build
 
+COMMON_SRC = ['debug.c', 'mem.c', 'fail_loc.c', 'lru.c',
+         'misc.c', 'pool_map.c', 'sort.c', 'btree.c', 'prop.c',
+         'btree_class.c', 'tse.c', 'rsvc.c', 'checksum.c',
+         'drpc.c', 'drpc.pb-c.c', 'proc.c',
+         'acl_api.c', 'acl_util.c', 'acl_principal.c',
+         'profile.c']
+
+def build_common(env, client):
+    denv = env.Clone()
+
+    if client:
+        install = 'lib64'
+        libname = 'daos_common_cli'
+    else:
+        denv.Append(CPPDEFINES=['-DDAOS_COMMON_PMEM'])
+        denv.Append(OBJPREFIX="s_")
+        prereqs.require(denv, 'pmdk')
+        install = 'lib64'
+        libname = 'daos_common'
+
+    common_src = COMMON_SRC
+    common = daos_build.library(denv, libname, common_src)
+    denv.Install('$PREFIX/' + install, common)
+
 def scons():
     """Execute build"""
     Import('env', 'prereqs', 'platform_arm')
@@ -12,24 +36,14 @@ def scons():
     # is correct, but set _libs to [] so that the library isn't
     # linked in.
 
-    prereqs.require(env, 'pmdk')
-
-    if not platform_arm:
-        prereqs.require(env, 'isal')
+    prereqs.require(env, 'isal')
 
     denv = env.Clone()
-
     prereqs.require(denv, 'protobufc')
     denv.AppendUnique(LIBS=['cart', 'gurt'])
-    common_src = ['debug.c', 'mem.c', 'fail_loc.c', 'lru.c',
-                  'misc.c', 'pool_map.c', 'sort.c', 'btree.c', 'prop.c',
-                  'btree_class.c', 'tse.c', 'rsvc.c', 'checksum.c',
-                  'drpc.c', 'drpc.pb-c.c', 'proc.c',
-                  'acl_api.c', 'acl_util.c', 'acl_principal.c',
-                  'profile.c']
 
-    common = daos_build.library(denv, 'libdaos_common', common_src)
-    denv.Install('$PREFIX/lib64/', common)
+    build_common(denv, True)
+    build_common(denv, False)
 
     tenv = denv.Clone()
 
