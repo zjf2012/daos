@@ -44,7 +44,7 @@ struct umem_tx_stage_item {
 	void		*txi_data;
 };
 
-#ifdef DAOS_COMMON_PMEM
+#ifndef DAOS_CLIENT_BUILD
 /** Convert an offset to an id.   No invalid flags will be maintained
  *  in the conversion.
  *
@@ -425,7 +425,7 @@ umem_off_t
 vmem_alloc(struct umem_instance *umm, size_t size, uint64_t flags,
 	   unsigned int type_num)
 {
-	return (uint64_t)((flags & POBJ_FLAG_ZERO) ?
+	return (uint64_t)((flags & UMEM_FLAG_ZERO) ?
 			  calloc(1, size) : malloc(size));
 }
 
@@ -440,9 +440,9 @@ vmem_tx_add_callback(struct umem_instance *umm, struct umem_tx_stage_data *txd,
 	 * vmem doesn't support transaction, so we just execute the commit
 	 * callback & end callback instantly and drop the abort callback.
 	 */
-	if (stage == TX_STAGE_ONCOMMIT || stage == TX_STAGE_NONE)
+	if (stage == VMEM_TX_STAGE_ONCOMMIT || stage == VMEM_TX_STAGE_NONE)
 		cb(data, false);
-	else if (stage == TX_STAGE_ONABORT)
+	else if (stage == VMEM_TX_STAGE_ONABORT)
 		cb(data, true);
 	else
 		return -DER_INVAL;
@@ -472,7 +472,7 @@ static struct umem_class umem_class_defined[] = {
 		.umc_ops	= &vmem_ops,
 		.umc_name	= "vmem",
 	},
-#ifdef DAOS_COMMON_PMEM
+#ifndef DAOS_CLIENT_BUILD
 	{
 		.umc_id		= UMEM_CLASS_PMEM,
 		.umc_ops	= &pmem_ops,
@@ -491,18 +491,13 @@ static struct umem_class umem_class_defined[] = {
 	},
 };
 
+#ifndef DAOS_CLIENT_BUILD
 /** Workout the necessary offsets and base address for the pool */
 static void
 set_offsets(struct umem_instance *umm)
 {
 	char		*root;
 	PMEMoid		 root_oid;
-
-	if (umm->umm_id == UMEM_CLASS_VMEM) {
-		umm->umm_base = 0;
-		umm->umm_pool_uuid_lo = 0;
-		return;
-	}
 
 	root_oid = pmemobj_root(umm->umm_pool, 0);
 	D_ASSERTF(!OID_IS_NULL(root_oid),
@@ -513,6 +508,7 @@ set_offsets(struct umem_instance *umm)
 	umm->umm_pool_uuid_lo = root_oid.pool_uuid_lo;
 	umm->umm_base = (uint64_t)root - root_oid.off;
 }
+#endif
 
 /**
  * Instantiate a memory class \a umm by attributes in \a uma
@@ -545,13 +541,20 @@ umem_class_init(struct umem_attr *uma, struct umem_instance *umm)
 	umm->umm_id		= umc->umc_id;
 	umm->umm_ops		= umc->umc_ops;
 	umm->umm_name		= umc->umc_name;
-	umm->umm_pool		= uma->uma_pool;
 	umm->umm_nospc_rc	= umc->umc_id == UMEM_CLASS_VMEM ?
 		-DER_NOMEM : -DER_NOSPACE;
+#ifndef DAOS_CLIENT_BUILD
+	umm->umm_pool		= uma->uma_pool;
 	memcpy(umm->umm_slabs, uma->uma_slabs,
 	       sizeof(struct pobj_alloc_class_desc) * UMM_SLABS_CNT);
 
 	set_offsets(umm);
+#endif
+	if (umm->umm_id == UMEM_CLASS_VMEM) {
+		umm->umm_base = 0;
+		umm->umm_pool_uuid_lo = 0;
+	}
+
 	return 0;
 }
 
@@ -562,7 +565,9 @@ void
 umem_attr_get(struct umem_instance *umm, struct umem_attr *uma)
 {
 	uma->uma_id = umm->umm_id;
+#ifndef DAOS_CLIENT_BUILD
 	uma->uma_pool = umm->umm_pool;
+#endif
 }
 
 /*

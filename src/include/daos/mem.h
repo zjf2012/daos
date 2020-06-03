@@ -41,7 +41,9 @@
  * umem		Unified memory abstraction
  * umoff	Unified Memory offset
  */
+#ifndef DAOS_CLIENT_BUILD
 #include <libpmemobj.h>
+#endif
 
 /** The offset of an object from the base address of the pool */
 typedef uint64_t		umem_off_t;
@@ -63,6 +65,9 @@ typedef uint64_t		umem_off_t;
 #define UMOFF_NULL		(0ULL)
 /** Check for a NULL value including possible invalid flag bits */
 #define UMOFF_IS_NULL(umoff)	(umem_off2offset(umoff) == 0)
+
+#define UMEM_FLAG_ZERO			(((uint64_t)1) << 0)
+#define UMEM_FLAG_NO_FLUSH		(((uint64_t)1) << 1)
 
 /** Retrieves any flags that are set.
  *
@@ -128,6 +133,17 @@ typedef enum {
 	/** unknown */
 	UMEM_CLASS_UNKNOWN,
 } umem_class_id_t;
+
+/** Transaction stages for VMEM only builds */
+enum vmem_tx_stage {
+	VMEM_TX_STAGE_NONE,          /* no transaction in this thread */
+	VMEM_TX_STAGE_WORK,          /* transaction in progress */
+	VMEM_TX_STAGE_ONCOMMIT,      /* successfully committed */
+	VMEM_TX_STAGE_ONABORT,       /* tx_begin failed or transaction aborted */
+	VMEM_TX_STAGE_FINALLY,       /* always called */
+
+	VMEM_MAX_TX_STAGE
+};
 
 struct umem_instance;
 
@@ -204,6 +220,12 @@ typedef struct {
 	/** commit memory transaction */
 	int		 (*mo_tx_commit)(struct umem_instance *umm);
 
+#ifndef DAOS_CLIENT_BUILD
+	/**
+	 * NB: mem.h ideally should be abstracted without pmem related
+	 * references in the API, since the goal of the API is to abstract
+	 * memory types.
+	 */
 	/**
 	 * Reserve space with specified size.
 	 *
@@ -236,6 +258,8 @@ typedef struct {
 	int		 (*mo_tx_publish)(struct umem_instance *umm,
 					  struct pobj_action *actv,
 					  int actv_cnt);
+
+#endif
 	/**
 	 * Add one commit or abort callback to current transaction.
 	 *
@@ -251,6 +275,7 @@ typedef struct {
 					       struct umem_tx_stage_data *txd,
 					       int stage, umem_tx_cb_t cb,
 					       void *data);
+
 } umem_ops_t;
 
 
@@ -259,9 +284,11 @@ typedef struct {
 /** attributes to initialise an unified memroy class */
 struct umem_attr {
 	umem_class_id_t			 uma_id;
+#ifndef DAOS_CLIENT_BUILD
 	PMEMobjpool			*uma_pool;
 	/** Slabs of the umem pool */
 	struct pobj_alloc_class_desc	 uma_slabs[UMM_SLABS_CNT];
+#endif
 };
 
 /** instance of an unified memory class */
@@ -269,9 +296,11 @@ struct umem_instance {
 	umem_class_id_t			umm_id;
 	int				umm_nospc_rc;
 	const char			*umm_name;
+#ifndef DAOS_CLIENT_BUILD
 	PMEMobjpool			*umm_pool;
 	/** Slabs of the umem pool */
 	struct pobj_alloc_class_desc	 umm_slabs[UMM_SLABS_CNT];
+#endif
 	/** Cache the pool id field for umem addresses */
 	uint64_t			umm_pool_uuid_lo;
 	/** Cache the base address of the pool */
@@ -280,6 +309,7 @@ struct umem_instance {
 	umem_ops_t			*umm_ops;
 };
 
+#ifndef DAOS_CLIENT_BUILD
 static inline bool
 umem_slab_registered(struct umem_instance *umm, unsigned int slab_id)
 {
@@ -300,6 +330,7 @@ umem_slab_usize(struct umem_instance *umm, unsigned int slab_id)
 	D_ASSERT(slab_id < UMM_SLABS_CNT);
 	return umm->umm_slabs[slab_id].unit_size;
 }
+#endif
 
 int  umem_class_init(struct umem_attr *uma, struct umem_instance *umm);
 void umem_attr_get(struct umem_instance *umm, struct umem_attr *uma);
@@ -374,10 +405,10 @@ umem_has_tx(struct umem_instance *umm)
 	umem_alloc_verb(umm, 0, size)
 
 #define umem_zalloc(umm, size)						\
-	umem_alloc_verb(umm, POBJ_FLAG_ZERO, size)
+	umem_alloc_verb(umm, UMEM_FLAG_ZERO, size)
 
 #define umem_alloc_noflush(umm, size)					\
-	umem_alloc_verb(umm, POBJ_FLAG_NO_FLUSH, size)
+	umem_alloc_verb(umm, UMEM_FLAG_NO_FLUSH, size)
 
 #define umem_free(umm, umoff)						\
 ({									\
@@ -445,6 +476,7 @@ umem_tx_end(struct umem_instance *umm, int err)
 		return umem_tx_commit(umm);
 }
 
+#ifndef DAOS_CLIENT_BUILD
 static inline umem_off_t
 umem_reserve(struct umem_instance *umm, struct pobj_action *act, size_t size)
 {
@@ -469,7 +501,7 @@ umem_tx_publish(struct umem_instance *umm, struct pobj_action *actv,
 		return umm->umm_ops->mo_tx_publish(umm, actv, actv_cnt);
 	return 0;
 }
-
+#endif
 static inline int
 umem_tx_add_callback(struct umem_instance *umm, struct umem_tx_stage_data *txd,
 		     int stage, umem_tx_cb_t cb, void *data)

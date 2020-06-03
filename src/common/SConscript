@@ -12,11 +12,11 @@ def build_common(env, client):
     denv = env.Clone()
 
     if client:
+        denv.Append(CPPDEFINES=['-DDAOS_CLIENT_BUILD'])
+        denv.Append(OBJPREFIX="v_")
         install = 'lib64'
         libname = 'daos_common_cli'
     else:
-        denv.Append(CPPDEFINES=['-DDAOS_COMMON_PMEM'])
-        denv.Append(OBJPREFIX="s_")
         prereqs.require(denv, 'pmdk')
         install = 'lib64'
         libname = 'daos_common'

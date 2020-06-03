@@ -43,9 +43,10 @@ btr_check_tx(struct btr_attr *attr)
 	if (attr->ba_uma.uma_id != UMEM_CLASS_PMEM)
 		return BTR_NO_TX;
 
+#ifndef DAOS_CLIENT_BUILD
 	if (pmemobj_tx_stage() == TX_STAGE_WORK)
 		return BTR_IN_TX;
-
+#endif
 	return BTR_SUPPORT_TX;
 }
 
