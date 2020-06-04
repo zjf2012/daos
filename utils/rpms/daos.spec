@@ -247,6 +247,7 @@ getent group daos_admins >/dev/null || groupadd -r daos_admins
 %{_prefix}%{_sysconfdir}/vos_dfs_sample.yaml
 %{_prefix}%{_sysconfdir}/vos_size_input.yaml
 %{_libdir}/libdaos_common.so
+%{_libdir}/libdaos_common_cli.so
 # TODO: this should move from daos_srv to daos
 %{_libdir}/daos_srv/libplacement.so
 # Certificate generation files
@@ -356,6 +357,9 @@ getent group daos_admins >/dev/null || groupadd -r daos_admins
 %{_libdir}/*.a
 
 %changelog
+* Wed Jun 3 2020 Vishwanath Venkatesan <vishwanath.venkatesan@intel.com> - 1.1.0-20
+- Add daos_common_cli library to the rpm build
+
 * Tue May 26 2020 Brian J. Murrell <brian.murrell@intel.com> - 1.1.0-19
 - Enable parallel building with _smp_mflags
 
