@@ -145,7 +145,7 @@ type (
 
 	// FirmwareQueryResponse contains the results of a successful firmware status query.
 	FirmwareQueryResponse struct {
-		FirmwareStatus storage.ScmFirmwareStatus
+		FirmwareStatus storage.ScmFirmwareInfo
 	}
 
 	// Backend defines a set of methods to be implemented by a SCM backend.
@@ -155,7 +155,8 @@ type (
 		PrepReset(storage.ScmState) (bool, error)
 		GetState() (storage.ScmState, error)
 		GetNamespaces() (storage.ScmNamespaces, error)
-		GetFirmwareStatus(deviceUID string) (*storage.ScmFirmwareStatus, error)
+		GetFirmwareStatus(deviceUID string) (*storage.ScmFirmwareInfo, error)
+		UpdateFirmware(deviceUID string, firmwarePath string) error
 	}
 
 	// SystemProvider defines a set of methods to be implemented by a provider

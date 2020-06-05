@@ -120,24 +120,59 @@ func (r *cmdRunner) Discover() (storage.ScmModules, error) {
 	return modules, nil
 }
 
-// GetFirmwareStatus gets the current firmware status for a specific device.
-func (r *cmdRunner) GetFirmwareStatus(deviceUID string) (*storage.ScmFirmwareStatus, error) {
-	var UID ipmctl.DeviceUID
-	n := copy(UID[:], deviceUID)
+func scmFirmwareUpdateStatusFromIpmctl(ipmctlStatus uint32) storage.ScmFirmwareUpdateStatus {
+	switch ipmctlStatus {
+	case ipmctl.FWUpdateStatusFailed:
+		return storage.ScmUpdateStatusFailed
+	case ipmctl.FWUpdateStatusSuccess:
+		return storage.ScmUpdateStatusSuccess
+	case ipmctl.FWUpdateStatusStaged:
+		return storage.ScmUpdateStatusStaged
+	}
+	return storage.ScmUpdateStatusUnknown
+}
+
+func uidStringToIpmctl(uidStr string) (ipmctl.DeviceUID, error) {
+	var uid ipmctl.DeviceUID
+	n := copy(uid[:], uidStr)
 	if n == 0 {
+		return ipmctl.DeviceUID{}, errors.New("invalid SCM module UID")
+	}
+	return uid, nil
+}
+
+// GetFirmwareStatus gets the current firmware status for a specific device.
+func (r *cmdRunner) GetFirmwareStatus(deviceUID string) (*storage.ScmFirmwareInfo, error) {
+	uid, err := uidStringToIpmctl(deviceUID)
+	if err != nil {
 		return nil, errors.New("invalid SCM module UID")
 	}
-	info, err := r.binding.GetFirmwareInfo(UID)
+	info, err := r.binding.GetFirmwareInfo(uid)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to get firmware info for device %q", deviceUID)
 	}
 
-	return &storage.ScmFirmwareStatus{
+	return &storage.ScmFirmwareInfo{
 		ActiveVersion:     info.ActiveFWVersion.String(),
 		StagedVersion:     info.StagedFWVersion.String(),
 		ImageMaxSizeBytes: info.FWImageMaxSize,
-		UpdateStatus:      info.FWUpdateStatus,
+		UpdateStatus:      scmFirmwareUpdateStatusFromIpmctl(info.FWUpdateStatus),
 	}, nil
+}
+
+// UpdateFirmware attempts to update the firmware on the given device with the binary at
+// the path provided.
+func (r *cmdRunner) UpdateFirmware(deviceUID string, firmwarePath string) error {
+	uid, err := uidStringToIpmctl(deviceUID)
+	if err != nil {
+		return errors.New("invalid SCM module UID")
+	}
+	// Force option permits minor version downgrade.
+	err = r.binding.UpdateFirmware(uid, firmwarePath, true)
+	if err != nil {
+		return errors.Wrapf(err, "failed to update firmware for device %q", deviceUID)
+	}
+	return nil
 }
 
 // getState establishes state of SCM regions and namespaces on local server.
