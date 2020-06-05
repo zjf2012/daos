@@ -2,13 +2,13 @@
 import daos_build
 
 COMMON_SRC = ['debug.c', 'mem.c', 'fail_loc.c', 'lru.c',
-         'misc.c', 'pool_map.c', 'sort.c', 'btree.c', 'prop.c',
-         'btree_class.c', 'tse.c', 'rsvc.c', 'checksum.c',
-         'drpc.c', 'drpc.pb-c.c', 'proc.c',
-         'acl_api.c', 'acl_util.c', 'acl_principal.c',
-         'profile.c']
+              'misc.c', 'pool_map.c', 'sort.c', 'btree.c', 'prop.c',
+              'btree_class.c', 'tse.c', 'rsvc.c', 'checksum.c',
+              'drpc.c', 'drpc.pb-c.c', 'proc.c',
+              'acl_api.c', 'acl_util.c', 'acl_principal.c',
+              'profile.c']
 
-def build_common(env, client):
+def build_common(env, client, prereqs):
     denv = env.Clone()
 
     if client:
@@ -18,7 +18,7 @@ def build_common(env, client):
         libname = 'daos_common_cli'
     else:
         prereqs.require(denv, 'pmdk')
-        install = 'lib64'
+        install = 'lib64/daos_srv'
         libname = 'daos_common'
 
     common_src = COMMON_SRC
@@ -42,8 +42,8 @@ def scons():
     prereqs.require(denv, 'protobufc')
     denv.AppendUnique(LIBS=['cart', 'gurt'])
 
-    build_common(denv, True)
-    build_common(denv, False)
+    build_common(denv, True, prereqs)
+    build_common(denv, False, prereqs)
 
     tenv = denv.Clone()
 
