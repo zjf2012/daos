@@ -48,6 +48,7 @@ enum {
 };
 
 #define DTX_UMOFF_TYPES		(DTX_UMOFF_ILOG | DTX_UMOFF_SVT | DTX_UMOFF_EVT)
+#define DTX_INDEX_INVAL		(int16_t)(-1)
 
 static inline void
 dtx_type2umoff_flag(umem_off_t *rec, uint32_t type)
@@ -367,9 +368,12 @@ vos_dtx_table_destroy(struct umem_instance *umm, struct vos_cont_df *cont_df)
 
 		for (i = 0; i < dbd->dbd_index; i++) {
 			dae_df = &dbd->dbd_active_data[i];
-			if (!(dae_df->dae_flags & DTE_INVALID) &&
-			    !umoff_is_null(dae_df->dae_rec_off))
-				umem_free(umm, dae_df->dae_rec_off);
+			if (!(dae_df->dae_flags & DTE_INVALID)) {
+				if (!umoff_is_null(dae_df->dae_rec_off))
+					umem_free(umm, dae_df->dae_rec_off);
+				if (!umoff_is_null(dae_df->dae_mbs_off))
+					umem_free(umm, dae_df->dae_mbs_off);
+			}
 		}
 
 		cont_df->cd_dtx_active_head = dbd->dbd_next;
@@ -426,7 +430,7 @@ do_dtx_rec_release(struct umem_instance *umm, struct vos_container *cont,
 
 		svt = umem_off2ptr(umm, umem_off2offset(rec));
 		if (abort) {
-			if (DAE_INDEX(dae) != -1)
+			if (DAE_INDEX(dae) != DTX_INDEX_INVAL)
 				umem_tx_add_ptr(umm, &svt->ir_dtx,
 						sizeof(svt->ir_dtx));
 			dtx_set_aborted(&svt->ir_dtx);
@@ -441,7 +445,7 @@ do_dtx_rec_release(struct umem_instance *umm, struct vos_container *cont,
 
 		evt = umem_off2ptr(umm, umem_off2offset(rec));
 		if (abort) {
-			if (DAE_INDEX(dae) != -1)
+			if (DAE_INDEX(dae) != DTX_INDEX_INVAL)
 				umem_tx_add_ptr(umm, &evt->dc_dtx,
 						sizeof(evt->dc_dtx));
 			dtx_set_aborted(&evt->dc_dtx);
@@ -485,6 +489,13 @@ dtx_rec_release(struct vos_container *cont, struct vos_dtx_act_ent *dae,
 
 	dae_df = umem_off2ptr(umm, dae->dae_df_off);
 	D_ASSERT(dae_df != NULL);
+
+	if (!umoff_is_null(dae_df->dae_mbs_off)) {
+		/* dae_mbs_off will be invalid via flag DTE_INVALID. */
+		umem_free(umm, dae_df->dae_mbs_off);
+		DAE_MBS_OFF(dae) = UMOFF_NULL;
+		DAE_MBS_DS(dae) = 0;
+	}
 
 	if (dae->dae_records != NULL) {
 		D_ASSERT(DAE_REC_CNT(dae) > DTX_INLINE_REC_CNT);
@@ -777,8 +788,14 @@ vos_dtx_alloc(struct umem_instance *umm, struct dtx_handle *dth)
 	DAE_FLAGS(dae) = dth->dth_flags;
 	DAE_VER(dae) = dth->dth_ver;
 
+	D_ASSERT(dth->dth_mbs != NULL);
+
+	DAE_TGT_CNT(dae) = dth->dth_mbs->dm_tgt_cnt;
+	DAE_GRP_CNT(dae) = dth->dth_mbs->dm_grp_cnt;
+	DAE_MBS_DS(dae) = dth->dth_mbs->dm_data_size;
+
 	/* Will be set as dbd::dbd_index via vos_dtx_prepared(). */
-	DAE_INDEX(dae) = -1;
+	DAE_INDEX(dae) = DTX_INDEX_INVAL;
 
 	dae->dae_df_off = cont_df->cd_dtx_active_tail +
 			offsetof(struct vos_dtx_blob_df, dbd_active_data) +
@@ -820,7 +837,7 @@ vos_dtx_append(struct umem_instance *umm, struct dtx_handle *dth,
 			int	count;
 
 			if (dae->dae_rec_cap == 0)
-				count = DTX_REC_CAP_DEFAULT;
+				count = DTX_INLINE_REC_CNT;
 			else
 				count = dae->dae_rec_cap * 2;
 
@@ -1127,6 +1144,9 @@ vos_dtx_prepared(struct dtx_handle *dth)
 	struct vos_container		*cont;
 	struct umem_instance		*umm;
 	struct vos_dtx_blob_df		*dbd;
+	umem_off_t			 rec_off;
+	size_t				 size;
+	int				 count;
 
 	if (!dth->dth_active)
 		return 0;
@@ -1159,12 +1179,23 @@ vos_dtx_prepared(struct dtx_handle *dth)
 	if (DAE_DKEY_HASH(dae) == 0)
 		dth->dth_sync = 1;
 
-	if (dae->dae_records != NULL) {
-		umem_off_t			*rec_df;
-		umem_off_t			 rec_off;
-		int				 count;
-		int				 size;
+	if (DAE_MBS_DS(dae) <= sizeof(DAE_MBS_INLINE(dae))) {
+		memcpy(DAE_MBS_INLINE(dae), dth->dth_mbs->dm_data,
+		       DAE_MBS_DS(dae));
+	} else {
+		rec_off = umem_zalloc(umm, DAE_MBS_DS(dae));
+		if (umoff_is_null(rec_off)) {
+			D_ERROR("No space to store DTX mbs "
+				DF_DTI"\n", DP_DTI(&DAE_XID(dae)));
+			return -DER_NOSPACE;
+		}
 
+		memcpy(umem_off2ptr(umm, rec_off),
+		       dth->dth_mbs->dm_data, DAE_MBS_DS(dae));
+		DAE_MBS_OFF(dae) = rec_off;
+	}
+
+	if (dae->dae_records != NULL) {
 		count = DAE_REC_CNT(dae) - DTX_INLINE_REC_CNT;
 		D_ASSERTF(count > 0, "Invalid DTX rec count %d\n", count);
 
@@ -1176,8 +1207,7 @@ vos_dtx_prepared(struct dtx_handle *dth)
 			return -DER_NOSPACE;
 		}
 
-		rec_df = umem_off2ptr(umm, rec_off);
-		memcpy(rec_df, dae->dae_records, size);
+		memcpy(umem_off2ptr(umm, rec_off), dae->dae_records, size);
 		DAE_REC_OFF(dae) = rec_off;
 	}
 
@@ -1667,7 +1697,6 @@ vos_dtx_act_reindex(struct vos_container *cont)
 		for (i = 0; i < dbd->dbd_index; i++) {
 			struct vos_dtx_act_ent_df	*dae_df;
 			struct vos_dtx_act_ent		*dae;
-			int				 count;
 
 			dae_df = &dbd->dbd_active_data[i];
 			if (dae_df->dae_flags & DTE_INVALID)
@@ -1709,23 +1738,25 @@ vos_dtx_act_reindex(struct vos_container *cont)
 			dae->dae_df_off = umem_ptr2off(umm, dae_df);
 			dae->dae_dbd = dbd;
 
-			if (DAE_REC_CNT(dae) <= DTX_INLINE_REC_CNT)
-				goto insert;
+			if (DAE_REC_CNT(dae) > DTX_INLINE_REC_CNT) {
+				size_t	size;
+				int	count;
 
-			count = DAE_REC_CNT(dae) - DTX_INLINE_REC_CNT;
-			D_ALLOC(dae->dae_records,
-				sizeof(*dae->dae_records) * count);
-			if (dae->dae_records == NULL) {
-				D_FREE_PTR(dae);
-				D_GOTO(out, rc = -DER_NOMEM);
+				count = DAE_REC_CNT(dae) - DTX_INLINE_REC_CNT;
+				size = sizeof(*dae->dae_records) * count;
+
+				D_ALLOC(dae->dae_records, size);
+				if (dae->dae_records == NULL) {
+					dtx_evict_lid(cont, dae);
+					D_GOTO(out, rc = -DER_NOMEM);
+				}
+
+				memcpy(dae->dae_records,
+				       umem_off2ptr(umm, dae_df->dae_rec_off),
+				       size);
+				dae->dae_rec_cap = count;
 			}
 
-			memcpy(dae->dae_records,
-			       umem_off2ptr(umm, dae_df->dae_rec_off),
-			       sizeof(*dae->dae_records) * count);
-			dae->dae_rec_cap = count;
-
-insert:
 			d_iov_set(&kiov, &DAE_XID(dae), sizeof(DAE_XID(dae)));
 			d_iov_set(&riov, dae, sizeof(*dae));
 			rc = dbtree_upsert(cont->vc_dtx_active_hdl,
