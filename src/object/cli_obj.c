@@ -2996,8 +2996,10 @@ dc_obj_punch(tse_task_t *task, daos_epoch_t epoch, uint32_t map_ver,
 	if (rc != 0)
 		goto out_task;
 
-	if (daos_oclass_is_ec(obj->cob_md.omd_id, NULL) ||
-	    DAOS_FAIL_CHECK(DAOS_DTX_COMMIT_SYNC))
+	if (daos_oclass_is_ec(obj->cob_md.omd_id, NULL))
+		obj_auxi->flags |= ORF_DTX_SYNC | ORF_EC;
+
+	if (DAOS_FAIL_CHECK(DAOS_DTX_COMMIT_SYNC))
 		obj_auxi->flags |= ORF_DTX_SYNC;
 
 	D_DEBUG(DB_IO, "punch "DF_OID" dkey %llu\n",

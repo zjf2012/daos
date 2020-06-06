@@ -228,15 +228,14 @@ check:
 static void
 dtx_handle_init(struct dtx_id *dti, daos_handle_t coh,
 		daos_epoch_t epoch,  uint32_t pm_ver,
-		daos_unit_oid_t *oid, uint64_t dkey_hash, uint32_t intent,
-		struct dtx_id *dti_cos, int dti_cos_count,
-		struct dtx_memberships *mbs,
+		daos_unit_oid_t *leader_oid, struct dtx_id *dti_cos,
+		int dti_cos_count, struct dtx_memberships *mbs,
 		bool leader, bool solo, struct dtx_handle *dth)
 {
 	dth->dth_xid = *dti;
 	dth->dth_coh = coh;
 	dth->dth_epoch = epoch;
-	dth->dth_oid = *oid;
+	dth->dth_leader_oid = *leader_oid;
 	dth->dth_ver = pm_ver;
 	dth->dth_refs = 1;
 	dth->dth_mbs = mbs;
@@ -247,32 +246,194 @@ dtx_handle_init(struct dtx_id *dti, daos_handle_t coh,
 	dth->dth_dti_cos_done = 0;
 	dth->dth_modify_shared = 0;
 	dth->dth_active = 0;
+	dth->dth_touched_leader_oid = 0;
+	dth->dth_local_tx_started = 0;
+	dth->dth_last_modification = 0;
 
 	dth->dth_dti_cos = dti_cos;
 	dth->dth_dti_cos_count = dti_cos_count;
 	dth->dth_ent = NULL;
 	dth->dth_flags = leader ? DTE_LEADER : 0;
 
-	/* Operation sequence starts from 1 instead of 0. */
-	dth->dth_op_seq = 1;
+	dth->dth_op_seq = 0;
+	dth->dth_ec_oid_cnt = 0;
+	dth->dth_ec_oid_cap = 0;
+	dth->dth_ec_oid_array = NULL;
 
-	dth->dth_intent = intent;
+	dth->dth_dkey_hash = 0;
+}
+
+static int
+dtx_insert_oid(struct dtx_handle *dth, daos_unit_oid_t *oid, bool touch_leader)
+{
+	int	start = 0;
+	int	end = dth->dth_ec_oid_cnt - 1;
+	int	at;
+	int	rc = 0;
+
+	do {
+		at = (start + end) / 2;
+		rc = daos_unit_oid_compare(dth->dth_ec_oid_array[at], *oid);
+		if (rc == 0)
+			return 0;
+
+		if (rc > 0)
+			end = at - 1;
+		else
+			start = at + 1;
+	} while (start <= end);
+
+	if (dth->dth_ec_oid_cnt == dth->dth_ec_oid_cap) {
+		daos_unit_oid_t		*oid_array;
+
+		D_ALLOC_ARRAY(oid_array, dth->dth_ec_oid_cap << 1);
+		if (oid_array == NULL)
+			return -DER_NOMEM;
+
+		if (rc > 0) {
+			/* Insert before dth->dth_ec_oid_array[at]. */
+			if (at > 0)
+				memcpy(&oid_array[0], &dth->dth_ec_oid_array[0],
+				       sizeof(*oid) * at);
+			oid_array[at] = *oid;
+			memcpy(&oid_array[at + 1], &dth->dth_ec_oid_array[at],
+			       sizeof(*oid) * (dth->dth_ec_oid_cnt - at));
+		} else {
+			/* Insert after dth->dth_ec_oid_array[at]. */
+			memcpy(&oid_array[0], &dth->dth_ec_oid_array[0],
+			       sizeof(*oid) * (at + 1));
+			oid_array[at + 1] = *oid;
+			if (at < dth->dth_ec_oid_cnt - 1)
+				memcpy(&oid_array[at + 2],
+				&dth->dth_ec_oid_array[at + 1],
+				sizeof(*oid) * (dth->dth_ec_oid_cnt - 1 - at));
+		}
+
+		D_FREE(dth->dth_ec_oid_array);
+		dth->dth_ec_oid_array = oid_array;
+		dth->dth_ec_oid_cap <<= 1;
+
+		goto out;
+	}
+
+	if (rc > 0) {
+		/* Insert before dth->dth_ec_oid_array[at]. */
+		memmove(&dth->dth_ec_oid_array[at + 1],
+			&dth->dth_ec_oid_array[at],
+			sizeof(*oid) * (dth->dth_ec_oid_cnt - at));
+		dth->dth_ec_oid_array[at] = *oid;
+	} else {
+		/* Insert after dth->dth_ec_oid_array[at]. */
+		if (at < dth->dth_ec_oid_cnt - 1)
+			memmove(&dth->dth_ec_oid_array[at + 2],
+				&dth->dth_ec_oid_array[at + 1],
+				sizeof(*oid) * (dth->dth_ec_oid_cnt - 1 - at));
+		dth->dth_ec_oid_array[at + 1] = *oid;
+	}
+
+out:
+	if (touch_leader)
+		dth->dth_touched_leader_oid = 1;
+
+	dth->dth_ec_oid_cnt++;
+
+	return 0;
+}
+
+/**
+ * Initialize the DTX handle for per modification based part.
+ *
+ * \param dth		[IN]	Pointer to the DTX handle.
+ * \param oid		[IN]	The target object (shard) ID.
+ * \param dkey_hash	[IN]	Hash of the dkey to be modified if applicable.
+ * \param is_ec		[IN]	An EC object or not.
+ */
+int
+dtx_sub_init(struct dtx_handle *dth, daos_unit_oid_t *oid,
+	     uint64_t dkey_hash, bool is_ec)
+{
+	int	rc = 0;
+
+	D_ASSERT(dth->dth_op_seq < (uint16_t)(-1));
+
+	if (dth == NULL)
+		return 0;
+
+	dth->dth_op_seq++;
 	dth->dth_dkey_hash = dkey_hash;
+
+	/* Only record EC objects for subsequent EC aggregation. */
+	if (!is_ec)
+		goto out;
+
+	rc = daos_unit_oid_compare(dth->dth_leader_oid, *oid);
+	if (rc == 0) {
+		if (dth->dth_ec_oid_array == NULL)
+			dth->dth_touched_leader_oid = 1;
+
+		if (dth->dth_touched_leader_oid)
+			goto out;
+
+		rc = dtx_insert_oid(dth, oid, true);
+
+		D_GOTO(out, rc);
+	}
+
+	if (dth->dth_ec_oid_array == NULL) {
+		D_ASSERT(dth->dth_ec_oid_cnt == 0);
+
+		/* 4 slots by default to hold rename case. */
+		dth->dth_ec_oid_cap = 4;
+		D_ALLOC_ARRAY(dth->dth_ec_oid_array, dth->dth_ec_oid_cap);
+		if (dth->dth_ec_oid_array == NULL)
+			D_GOTO(out, rc = -DER_NOMEM);
+
+		if (!dth->dth_touched_leader_oid) {
+			dth->dth_ec_oid_array[0] = *oid;
+			dth->dth_ec_oid_cnt = 1;
+
+			D_GOTO(out, rc = 0);
+		}
+
+		dth->dth_ec_oid_cnt = 2;
+
+		if (rc > 0) {
+			dth->dth_ec_oid_array[0] = *oid;
+			dth->dth_ec_oid_array[1] = dth->dth_leader_oid;
+		} else {
+			dth->dth_ec_oid_array[0] = dth->dth_leader_oid;
+			dth->dth_ec_oid_array[1] = *oid;
+		}
+
+		D_GOTO(out, rc = 0);
+	}
+
+	rc = dtx_insert_oid(dth, oid, false);
+
+out:
+	/* FIXME: fix it when really support multiple modifications via
+	 *	  single DTX.
+	 */
+	dth->dth_last_modification = 1;
+
+	D_DEBUG(DB_IO, "Sub init DTX "DF_DTI" for %s object "DF_UOID
+		" dkey %lu, opc seq %d: "DF_RC"\n",
+		DP_DTI(&dth->dth_xid), is_ec ? "EC" : "non-EC", DP_UOID(*oid),
+		(unsigned long)dkey_hash, dth->dth_op_seq, DP_RC(rc));
+
+	return rc;
 }
 
 /**
  * Prepare the leader DTX handle in DRAM.
  *
- * XXX: Currently, we only support to prepare the DTX against single DAOS
- *	object and single dkey.
- *
  * \param cont		[IN]	Pointer to the container.
  * \param dti		[IN]	The DTX identifier.
  * \param epoch		[IN]	Epoch for the DTX.
  * \param pm_ver	[IN]	Pool map version for the DTX.
- * \param oid		[IN]	The target object (shard) ID.
- * \param dkey_hash	[IN]	Hash of the dkey to be modified if applicable.
- * \param intent	[IN]	The intent of related modification.
+ * \param leader_oid	[IN]	The object ID is used to elect the DTX leader.
+ * \param dti_cos	[IN]	The DTX array to be committed because of shared.
+ * \param dti_cos_count [IN]	The @dti_cos array size.
  * \param tgts		[IN]	targets for distribute transaction.
  * \param tgt_cnt	[IN]	number of targets.
  * \param mbs		[IN]	DTX participants information.
@@ -283,13 +444,12 @@ dtx_handle_init(struct dtx_id *dti, daos_handle_t coh,
 int
 dtx_leader_begin(struct ds_cont_child *cont, struct dtx_id *dti,
 		 daos_epoch_t epoch, uint32_t pm_ver,
-		 daos_unit_oid_t *oid, uint64_t dkey_hash, uint32_t intent,
+		 daos_unit_oid_t *leader_oid,
+		 struct dtx_id *dti_cos, int dti_cos_cnt,
 		 struct daos_shard_tgt *tgts, int tgt_cnt,
 		 struct dtx_memberships *mbs, struct dtx_leader_handle *dlh)
 {
 	struct dtx_handle	*dth = &dlh->dlh_handle;
-	struct dtx_id		*dti_cos = NULL;
-	int			 dti_cos_count = 0;
 	int			 i;
 
 	memset(dlh, 0, sizeof(*dlh));
@@ -314,30 +474,13 @@ dtx_leader_begin(struct ds_cont_child *cont, struct dtx_id *dti,
 	if (daos_is_zero_dti(dti))
 		return 0;
 
-	/* XXX: The leader needs to find out the DTXs in the CoS cache
-	 *	that modified potential shared items (object/dkey/akey),
-	 *	and append them to the dispatched RPC to non-leaders.
-	 *	Then non-leader replicas can commit them before real
-	 *	modifications to avoid availability trouble.
-	 */
-	dti_cos_count = dtx_list_cos(cont, oid, dkey_hash,
-				     DTX_THRESHOLD_COUNT, &dti_cos);
-	if (dti_cos_count < 0) {
-		D_FREE(dlh->dlh_subs);
-		return dti_cos_count;
-	}
-
 init:
 	dtx_handle_init(dti, cont->sc_hdl, epoch, pm_ver,
-			oid, dkey_hash, intent,
-			dti_cos, dti_cos_count, mbs, true,
+			leader_oid, dti_cos, dti_cos_cnt, mbs, true,
 			tgt_cnt == 0 ? true : false, dth);
 
-	D_DEBUG(DB_IO, "Start DTX "DF_DTI" for object "DF_UOID
-		" ver %u, dkey %lu, dti_cos_count %d, intent %s\n",
-		DP_DTI(dti), DP_UOID(*oid), dth->dth_ver,
-		(unsigned long)dth->dth_dkey_hash, dti_cos_count,
-		intent == DAOS_INTENT_PUNCH ? "Punch" : "Update");
+	D_DEBUG(DB_IO, "Start DTX "DF_DTI" ver %u, dti_cos_count %d\n",
+		DP_DTI(dti), dth->dth_ver, dti_cos_cnt);
 
 	return 0;
 }
@@ -423,7 +566,7 @@ again:
 		}
 	}
 
-	rc = vos_dtx_check_sync(dth->dth_coh, dth->dth_oid, &epoch);
+	rc = vos_dtx_check_sync(dth->dth_coh, dth->dth_leader_oid, &epoch);
 	/* Only add async DTX into the CoS cache. */
 	if (rc == 0) {
 		struct dtx_memberships	*mbs;
@@ -470,8 +613,10 @@ again:
 
 		/* Use the new created @dte instead of dth->dth_dte that will be
 		 * released after dtx_leader_end().
+		 *
+		 * Only the DTX for single RDG may be added into CoS cache.
 		 */
-		rc = dtx_add_cos(cont, dte, &dth->dth_oid,
+		rc = dtx_add_cos(cont, dte, &dth->dth_leader_oid,
 				 dth->dth_dkey_hash, dth->dth_epoch,
 				 dth->dth_modify_shared ? DCF_SHARED : 0);
 		dtx_entry_put(dte);
@@ -536,12 +681,11 @@ abort:
 out:
 	if (!daos_is_zero_dti(&dth->dth_xid))
 		D_DEBUG(DB_IO,
-			"Stop the DTX "DF_DTI" ver %u, dkey %lu, intent %s, "
-			"%s, %s participator(s): rc "DF_RC"\n",
+			"Stop the DTX "DF_DTI" ver %u, dkey %lu, %s, "
+			"%s participator(s): rc "DF_RC"\n",
 			DP_DTI(&dth->dth_xid), dth->dth_ver,
 			(unsigned long)dth->dth_dkey_hash,
-			dth->dth_intent == DAOS_INTENT_PUNCH ?
-			"Punch" : "Update", dth->dth_sync ? "sync" : "async",
+			dth->dth_sync ? "sync" : "async",
 			dth->dth_solo ? "single" : "multiple", DP_RC(result));
 
 	D_ASSERTF(result <= 0, "unexpected return value %d\n", result);
@@ -552,11 +696,11 @@ out:
 
 		for (i = 0; i < dth->dth_dti_cos_count; i++)
 			dtx_del_cos(cont, &dth->dth_dti_cos[i],
-				    &dth->dth_oid, dth->dth_dkey_hash);
+				    &dth->dth_leader_oid, dth->dth_dkey_hash);
 	}
 
-	D_FREE(dth->dth_dti_cos);
 	D_FREE(dlh->dlh_subs);
+	D_FREE(dth->dth_ec_oid_array);
 
 	return result;
 }
@@ -564,16 +708,11 @@ out:
 /**
  * Prepare the DTX handle in DRAM.
  *
- * XXX: Currently, we only support to prepare the DTX against single DAOS
- *	object and single dkey.
- *
  * \param cont		[IN]	Pointer to the container.
  * \param dti		[IN]	The DTX identifier.
  * \param epoch		[IN]	Epoch for the DTX.
  * \param pm_ver	[IN]	Pool map version for the DTX.
- * \param oid		[IN]	The target object (shard) ID.
- * \param dkey_hash	[IN]	Hash of the dkey to be modified if applicable.
- * \param intent	[IN]	The intent of related modification.
+ * \param leader_oid	[IN]	The object ID is used to elect the DTX leader.
  * \param dti_cos	[IN]	The DTX array to be committed because of shared.
  * \param dti_cos_count [IN]	The @dti_cos array size.
  * \param mbs		[IN]	DTX participants information.
@@ -584,8 +723,7 @@ out:
 int
 dtx_begin(struct ds_cont_child *cont, struct dtx_id *dti,
 	  daos_epoch_t epoch, uint32_t pm_ver,
-	  daos_unit_oid_t *oid, uint64_t dkey_hash, uint32_t intent,
-	  struct dtx_id *dti_cos, int dti_cos_cnt,
+	  daos_unit_oid_t *leader_oid, struct dtx_id *dti_cos, int dti_cos_cnt,
 	  struct dtx_memberships *mbs, struct dtx_handle *dth)
 {
 	D_ASSERT(dth != NULL);
@@ -596,14 +734,11 @@ dtx_begin(struct ds_cont_child *cont, struct dtx_id *dti,
 	}
 
 	dtx_handle_init(dti, cont->sc_hdl, epoch, pm_ver,
-			oid, dkey_hash, intent,
-			dti_cos, dti_cos_cnt, mbs, false, false, dth);
+			leader_oid, dti_cos, dti_cos_cnt, mbs, false,
+			false, dth);
 
-	D_DEBUG(DB_IO, "Start the DTX "DF_DTI" for object "DF_UOID
-		" ver %u, dkey %lu, dti_cos_count %d, intent %s\n",
-		DP_DTI(dti), DP_UOID(*oid), dth->dth_ver,
-		(unsigned long)dth->dth_dkey_hash, dti_cos_cnt,
-		intent == DAOS_INTENT_PUNCH ? "Punch" : "Update");
+	D_DEBUG(DB_IO, "Start the DTX "DF_DTI" ver %u, dti_cos_count %d\n",
+		DP_DTI(dti), dth->dth_ver, dti_cos_cnt);
 
 	return 0;
 }
@@ -638,13 +773,13 @@ dtx_end(struct dtx_handle *dth, struct ds_cont_child *cont, int result)
 	}
 
 	D_DEBUG(DB_IO,
-		"Stop the DTX "DF_DTI" ver %u, dkey %lu, intent %s, rc = %d\n",
+		"Stop the DTX "DF_DTI" ver %u, dkey %lu: "DF_RC"\n",
 		DP_DTI(&dth->dth_xid), dth->dth_ver,
-		(unsigned long)dth->dth_dkey_hash,
-		dth->dth_intent == DAOS_INTENT_PUNCH ? "Punch" : "Update",
-		result);
+		(unsigned long)dth->dth_dkey_hash, DP_RC(result));
 
 	D_ASSERTF(result <= 0, "unexpected return value %d\n", result);
+
+	D_FREE(dth->dth_ec_oid_array);
 
 	return result;
 }

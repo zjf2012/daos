@@ -160,7 +160,22 @@ struct vos_dtx_ent_common {
 
 /** Committed DTX entry on-disk layout in both SCM and DRAM. */
 struct vos_dtx_cmt_ent_df {
+	/**
+	 * For single RDG based DTX, the DTX may be in the CoS cache. Under
+	 * such case, 'dce_common.dec_oid' is part of the key for CoS cache.
+	 *
+	 * For cross RDGs modification, the DTX will not be in CoS cache.
+	 * Under such case, if only single EC object is modified by this
+	 * DTX, its OID is stored inside 'dce_common.dec_oid'; otherwise,
+	 * the EC objects' OIDs are stored via 'dce_ec_oid_off'.
+	 */
 	struct vos_dtx_ent_common	dce_common;
+	/**
+	 * The offset for the EC objects' OID if more than one are modified.
+	 * Under such case, 'dce_common.dec_dkey_hash' is used as the count
+	 * of EC objects' IDs.
+	 */
+	umem_off_t			dce_ec_oid_off;
 };
 
 #define dce_xid		dce_common.dec_xid
@@ -191,8 +206,18 @@ struct vos_dtx_act_ent_df {
 	uint32_t			dae_grp_cnt;
 	/** Size of the area for dae_mbs_off. */
 	uint32_t			dae_mbs_ds;
-	/** For 64-bits alignment. */
-	uint32_t			dae_padding;
+	/**
+	 * The count of EC objects that are modified by this DTX.
+	 *
+	 * If single EC object is modified and if it is the same as the
+	 * 'dae_oid', then 'dae_ec_oid_cnt' is zero.
+	 *
+	 * If the single EC object is differet from 'dae_oid', then the
+	 * 'dae_ec_oid_cnt' is 1, its OID is stored in 'dae_ec_oid_inline'.
+	 */
+	uint16_t			dae_ec_oid_cnt;
+	/** For 32-bits alignment. */
+	uint16_t			dae_padding;
 	/**
 	 * The inline DTX targets, can hold 3-way replicas for single
 	 * RDG that does not contains the original leader information.
@@ -200,6 +225,12 @@ struct vos_dtx_act_ent_df {
 	struct dtx_daos_target		dae_mbs_inline[2];
 	/** The offset for the dtx mbs if out of inline. */
 	umem_off_t			dae_mbs_off;
+	union {
+		/** Hold the EC object'x OID if different from dae_oid. */
+		daos_unit_oid_t		dae_ec_oid_inline;
+		/** The offset for EC objects' OIDs if out of inline case. */
+		umem_off_t		dae_ec_oid_off;
+	};
 };
 
 #define dae_xid		dae_common.dec_xid
@@ -223,7 +254,7 @@ struct vos_dtx_blob_df {
 	/** Append only DTX entries in the blob. */
 	union {
 		struct vos_dtx_act_ent_df	dbd_active_data[0];
-		struct vos_dtx_cmt_ent_df	dbd_commmitted_data[0];
+		struct vos_dtx_cmt_ent_df	dbd_committed_data[0];
 	};
 };
 

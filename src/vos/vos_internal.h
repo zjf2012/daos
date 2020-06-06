@@ -283,8 +283,11 @@ do {						\
 #define DAE_TGT_CNT(dae)	((dae)->dae_base.dae_tgt_cnt)
 #define DAE_GRP_CNT(dae)	((dae)->dae_base.dae_grp_cnt)
 #define DAE_MBS_DS(dae)		((dae)->dae_base.dae_mbs_ds)
+#define DAE_EC_OID_CNT(dae)	((dae)->dae_base.dae_ec_oid_cnt)
 #define DAE_MBS_INLINE(dae)	((dae)->dae_base.dae_mbs_inline)
 #define DAE_MBS_OFF(dae)	((dae)->dae_base.dae_mbs_off)
+#define DAE_EC_OID_INLINE(dae)	((dae)->dae_base.dae_ec_oid_inline)
+#define DAE_EC_OID_OFF(dae)	((dae)->dae_base.dae_ec_oid_off)
 
 struct vos_dtx_cmt_ent {
 	/* Link into vos_conter::vc_dtx_committed_list */
@@ -298,6 +301,8 @@ struct vos_dtx_cmt_ent {
 #define DCE_EPOCH(dce)		((dce)->dce_base.dce_epoch)
 #define DCE_OID(dce)		((dce)->dce_base.dce_oid)
 #define DCE_DKEY_HASH(dce)	((dce)->dce_base.dce_dkey_hash)
+#define DCE_EC_OID_OFF(dce)	((dce)->dce_base.dce_ec_oid_off)
+#define DCE_EC_OID_CNT(dce)	DCE_DKEY_HASH(dce)
 
 /* in-memory structures standalone instance */
 struct bio_xs_context		*vsa_xsctxt_inst;
