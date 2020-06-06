@@ -1517,7 +1517,7 @@ ds_obj_rw_handler(crt_rpc_t *rpc)
 {
 	struct obj_rw_in		*orw = crt_req_get(rpc);
 	struct obj_rw_out		*orwo = crt_reply_get(rpc);
-	struct dtx_leader_handle	dlh = { 0 };
+	struct dtx_leader_handle	dlh;
 	struct ds_obj_exec_arg		exec_arg = { 0 };
 	struct obj_io_context		ioc;
 	uint64_t			time_start = 0;
@@ -1571,6 +1571,7 @@ ds_obj_rw_handler(crt_rpc_t *rpc)
 
 	version = orw->orw_map_ver;
 
+again:
 	/* Handle resend. */
 	if (orw->orw_flags & ORF_RESEND) {
 		daos_epoch_t	epoch = 0;
@@ -1594,7 +1595,6 @@ ds_obj_rw_handler(crt_rpc_t *rpc)
 
 	D_TIME_START(time_start, OBJ_PF_UPDATE);
 
-renew:
 	/*
 	 * Since we do not know if other replicas execute the
 	 * operation, so even the operation has been execute
@@ -1623,7 +1623,7 @@ renew:
 	exec_arg.cont_hdl = ioc.ioc_coh;
 	exec_arg.cont	  = ioc.ioc_coc;
 	exec_arg.args	  = split_req;
-again:
+
 	if (orw->orw_flags & ORF_DTX_SYNC)
 		dlh.dlh_handle.dth_sync = 1;
 
@@ -1640,15 +1640,18 @@ out:
 
 	/* Stop the distribute transaction */
 	rc = dtx_leader_end(&dlh, ioc.ioc_coc, rc);
-	if (rc == -DER_TX_RESTART) {
+	switch (rc) {
+	case -DER_TX_RESTART:
 		/* Retry with newer epoch. */
 		orw->orw_epoch = crt_hlc_get();
-		flags &= ~ORF_RESEND;
-		memset(&dlh, 0, sizeof(dlh));
-		D_GOTO(renew, rc);
-	} else if (rc == -DER_AGAIN) {
-		flags |= ORF_RESEND;
-		D_GOTO(again, rc);
+		orw->orw_flags &= ~ORF_RESEND;
+		flags = 0;
+		goto again;
+	case -DER_AGAIN:
+		orw->orw_flags |= ORF_RESEND;
+		goto again;
+	default:
+		break;
 	}
 
 	if (opc == DAOS_OBJ_RPC_UPDATE && !(orw->orw_flags & ORF_RESEND) &&
@@ -2136,7 +2139,7 @@ obj_tgt_punch(struct dtx_leader_handle *dlh, void *arg, int idx,
 void
 ds_obj_punch_handler(crt_rpc_t *rpc)
 {
-	struct dtx_leader_handle	dlh = { 0 };
+	struct dtx_leader_handle	dlh;
 	struct obj_punch_in		*opi;
 	struct ds_obj_exec_arg		exec_arg = { 0 };
 	struct obj_io_context		ioc;
@@ -2180,6 +2183,7 @@ ds_obj_punch_handler(crt_rpc_t *rpc)
 
 	version = opi->opi_map_ver;
 
+again:
 	/* Handle resend. */
 	if (opi->opi_flags & ORF_RESEND) {
 		daos_epoch_t	epoch = 0;
@@ -2202,7 +2206,6 @@ ds_obj_punch_handler(crt_rpc_t *rpc)
 		goto cleanup;
 	}
 
-renew:
 	/*
 	 * Since we do not know if other replicas execute the
 	 * operation, so even the operation has been execute
@@ -2230,7 +2233,7 @@ renew:
 	exec_arg.rpc = rpc;
 	exec_arg.cont_hdl = ioc.ioc_coh;
 	exec_arg.cont = ioc.ioc_coc;
-again:
+
 	if (opi->opi_flags & ORF_DTX_SYNC)
 		dlh.dlh_handle.dth_sync = 1;
 
@@ -2246,15 +2249,18 @@ out:
 
 	/* Stop the distribute transaction */
 	rc = dtx_leader_end(&dlh, ioc.ioc_coc, rc);
-	if (rc == -DER_TX_RESTART) {
+	switch (rc) {
+	case -DER_TX_RESTART:
 		/* Retry with newer epoch. */
 		opi->opi_epoch = crt_hlc_get();
-		flags &= ~ORF_RESEND;
-		memset(&dlh, 0, sizeof(dlh));
-		D_GOTO(renew, rc);
-	} else if (rc == -DER_AGAIN) {
-		flags |= ORF_RESEND;
-		D_GOTO(again, rc);
+		opi->opi_flags &= ~ORF_RESEND;
+		flags = 0;
+		goto again;
+	case -DER_AGAIN:
+		opi->opi_flags |= ORF_RESEND;
+		goto again;
+	default:
+		break;
 	}
 
 	if (!(opi->opi_flags & ORF_RESEND) &&
