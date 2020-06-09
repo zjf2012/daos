@@ -893,3 +893,82 @@ func TestParseFsType(t *testing.T) {
 		})
 	}
 }
+
+func TestProvider_QueryFirmware(t *testing.T) {
+	defaultModules := storage.ScmModules{
+		&storage.ScmModule{UID: "Device1"},
+		&storage.ScmModule{UID: "Device2"},
+		&storage.ScmModule{UID: "Device3"},
+	}
+
+	fwInfo := &storage.ScmFirmwareInfo{
+		ActiveVersion:     "ACTIVE",
+		StagedVersion:     "STAGED",
+		ImageMaxSizeBytes: 1 << 20,
+		UpdateStatus:      storage.ScmUpdateStatusStaged,
+	}
+
+	for name, tc := range map[string]struct {
+		inputDevices []string
+		backendCfg   *MockBackendConfig
+		expErr       error
+		expRes       *FirmwareQueryResponse
+	}{
+		"discovery failed": {
+			backendCfg: &MockBackendConfig{DiscoverErr: errors.New("mock discovery")},
+			expErr:     errors.New("mock discovery"),
+		},
+		"no modules": {
+			expErr: errors.New("no SCM modules"),
+		},
+		"success": {
+			backendCfg: &MockBackendConfig{
+				DiscoverRes:          defaultModules,
+				GetFirmwareStatusRes: fwInfo,
+			},
+			expRes: &FirmwareQueryResponse{
+				FirmwareInfo: map[string]storage.ScmFirmwareInfo{
+					"Device1": *fwInfo,
+					"Device2": *fwInfo,
+					"Device3": *fwInfo,
+				},
+			},
+		},
+		"get status failed": {
+			backendCfg: &MockBackendConfig{
+				DiscoverRes:          defaultModules,
+				GetFirmwareStatusErr: errors.New("mock query"),
+			},
+			expErr: errors.New("error getting firmware status for device Device1: mock query"),
+		},
+		"request device subset": {
+			inputDevices: []string{"Device1", "Device3"},
+			backendCfg: &MockBackendConfig{
+				DiscoverRes:          defaultModules,
+				GetFirmwareStatusRes: fwInfo,
+			},
+			expRes: &FirmwareQueryResponse{
+				FirmwareInfo: map[string]storage.ScmFirmwareInfo{
+					"Device1": *fwInfo,
+					"Device3": *fwInfo,
+				},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			log, buf := logging.NewTestLogger(t.Name())
+			defer common.ShowBufferOnFailure(t, buf)
+
+			p := NewMockProvider(log, tc.backendCfg, nil)
+
+			res, err := p.QueryFirmware(FirmwareQueryRequest{
+				Devices: tc.inputDevices,
+			})
+
+			common.CmpErr(t, tc.expErr, err)
+			if diff := cmp.Diff(tc.expRes, res); diff != "" {
+				t.Fatalf("unexpected response (-want, +got):\n%s\n", diff)
+			}
+		})
+	}
+}

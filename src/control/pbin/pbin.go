@@ -40,6 +40,9 @@ const (
 	// can be set to enable non-ERROR logging in the privileged binary.
 	DaosAdminLogFileEnvVar = "DAOS_ADMIN_LOG_FILE"
 
+	// DaosFWName is the name of the daos_firmware privileged helper.
+	DaosFWName = "daos_firmware"
+
 	// DaosFWLogFileEnvVar is the name of the environment variable that
 	// can be set to enable non-ERROR logging in the daos_firmware binary.
 	DaosFWLogFileEnvVar = "DAOS_FIRMWARE_LOG_FILE"
